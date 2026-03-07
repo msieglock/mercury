@@ -1,0 +1,29 @@
+{
+  "name": "mercury",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
+    "dev:web": "turbo dev --filter=@mercury/web",
+    "dev:api": "turbo dev --filter=@mercury/api",
+    "dev:mobile": "turbo dev --filter=@mercury/mobile",
+    "build:web": "turbo build --filter=@mercury/web",
+    "build:api": "turbo build --filter=@mercury/api",
+    "db:migrate": "cd supabase && supabase db push",
+    "db:reset": "cd supabase && supabase db reset"
+  },
+  "devDependencies": {
+    "react": "^19.2.4",
+    "turbo": "^2.4.0"
+  },
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": ">=20"
+  }
+}

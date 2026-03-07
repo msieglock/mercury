@@ -1,0 +1,132 @@
+import React, { useState } from "react";
+import { View, Text, Pressable, ScrollView, TextInput } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
+import { Building2, Target, MapPin, Users } from "lucide-react-native";
+
+interface ICPField {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  placeholder: string;
+}
+
+export default function SalesICPScreen() {
+  const router = useRouter();
+
+  const [companyName] = useState("Acme Corp");
+  const [industry, setIndustry] = useState("B2B SaaS");
+  const [companySize, setCompanySize] = useState("50-500 employees");
+  const [targetRoles, setTargetRoles] = useState("VP Sales, CRO, Head of Revenue");
+  const [geography, setGeography] = useState("North America");
+
+  const handleConfirm = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push("/(auth)/onboarding/sales-discovery");
+  };
+
+  const fields: ICPField[] = [
+    {
+      icon: <Building2 size={18} color="#D4552A" />,
+      label: "Target Industry",
+      value: industry,
+      placeholder: "e.g., B2B SaaS, Healthcare",
+    },
+    {
+      icon: <Users size={18} color="#D4552A" />,
+      label: "Company Size",
+      value: companySize,
+      placeholder: "e.g., 50-500 employees",
+    },
+    {
+      icon: <Target size={18} color="#D4552A" />,
+      label: "Target Roles",
+      value: targetRoles,
+      placeholder: "e.g., VP Sales, CRO",
+    },
+    {
+      icon: <MapPin size={18} color="#D4552A" />,
+      label: "Geography",
+      value: geography,
+      placeholder: "e.g., North America",
+    },
+  ];
+
+  const setters: Record<string, (val: string) => void> = {
+    "Target Industry": setIndustry,
+    "Company Size": setCompanySize,
+    "Target Roles": setTargetRoles,
+    Geography: setGeography,
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+      <ScrollView className="flex-1 px-8" contentContainerStyle={{ paddingVertical: 32 }}>
+        <View className="items-center mb-8">
+          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+            Your ideal customer
+          </Text>
+          <Text className="text-warm-500 text-base text-center leading-6">
+            Mercury analyzed your account. Review and{"\n"}adjust your target
+            customer profile.
+          </Text>
+        </View>
+
+        {/* Company info card */}
+        <View className="bg-white rounded-2xl p-5 mb-6 shadow-sm">
+          <View className="flex-row items-center gap-3 mb-3">
+            <View className="w-10 h-10 bg-sienna-50 rounded-xl items-center justify-center">
+              <Building2 size={20} color="#D4552A" />
+            </View>
+            <View>
+              <Text className="text-charcoal text-base font-semibold">
+                {companyName}
+              </Text>
+              <Text className="text-warm-500 text-xs">
+                Company profile from Apollo
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <View className="bg-sienna-50 px-2.5 py-1 rounded-full">
+              <Text className="text-sienna text-[10px] font-semibold uppercase">
+                AI Suggested
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Editable ICP fields */}
+        <View className="gap-4 mb-8">
+          {fields.map((field) => (
+            <View key={field.label} className="bg-white rounded-2xl p-4 shadow-sm">
+              <View className="flex-row items-center gap-2 mb-2">
+                {field.icon}
+                <Text className="text-warm-600 text-xs font-semibold uppercase tracking-wider">
+                  {field.label}
+                </Text>
+              </View>
+              <TextInput
+                value={field.value}
+                onChangeText={(text) => setters[field.label]?.(text)}
+                placeholder={field.placeholder}
+                placeholderTextColor="#B8B3A7"
+                className="text-charcoal text-base py-1"
+              />
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          onPress={handleConfirm}
+          className="bg-sienna py-4 rounded-2xl items-center active:opacity-80"
+        >
+          <Text className="text-white text-base font-semibold">
+            Confirm & Find Opportunities
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}

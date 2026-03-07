@@ -1,0 +1,46 @@
+{
+  "name": "@mercury/ai",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway.d.ts",
+      "import": "./dist/gateway.js",
+      "require": "./dist/gateway.js"
+    },
+    "./tone-engine": {
+      "types": "./dist/tone-engine.d.ts",
+      "import": "./dist/tone-engine.js",
+      "require": "./dist/tone-engine.js"
+    },
+    "./agents/*": {
+      "types": "./dist/agents/*.d.ts",
+      "import": "./dist/agents/*.js",
+      "require": "./dist/agents/*.js"
+    },
+    "./prompts": {
+      "types": "./dist/prompts/index.d.ts",
+      "import": "./dist/prompts/index.js",
+      "require": "./dist/prompts/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@mercury/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
