@@ -117,10 +117,13 @@ const rateLimiter = new RateLimiter(5);
 
 const APOLLO_BASE_URL = 'https://api.apollo.io/v1';
 
-async function apolloFetch<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
-  const apiKey = process.env.APOLLO_API_KEY;
+async function apolloFetch<T>(
+  apiKey: string,
+  endpoint: string,
+  body: Record<string, unknown>
+): Promise<T> {
   if (!apiKey) {
-    throw new Error('Missing APOLLO_API_KEY environment variable');
+    throw new Error('Missing APOLLO_API_KEY');
   }
 
   await rateLimiter.acquire();
@@ -138,7 +141,7 @@ async function apolloFetch<T>(endpoint: string, body: Record<string, unknown>): 
     // Rate limited -- wait and retry once
     const retryAfter = parseInt(response.headers.get('retry-after') ?? '5', 10);
     await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-    return apolloFetch<T>(endpoint, body);
+    return apolloFetch<T>(apiKey, endpoint, body);
   }
 
   if (!response.ok) {
@@ -155,9 +158,10 @@ async function apolloFetch<T>(endpoint: string, body: Record<string, unknown>): 
  * Search for people matching given criteria via Apollo People Search.
  */
 export async function searchPeople(
+  apiKey: string,
   params: ApolloSearchPeopleParams
 ): Promise<ApolloSearchPeopleResponse> {
-  return apolloFetch<ApolloSearchPeopleResponse>('/mixed_people/search', {
+  return apolloFetch<ApolloSearchPeopleResponse>(apiKey, '/mixed_people/search', {
     ...params,
     per_page: params.per_page ?? 25,
     page: params.page ?? 1,
@@ -168,9 +172,14 @@ export async function searchPeople(
  * Enrich a single person with Apollo People Enrichment.
  */
 export async function enrichPerson(
+  apiKey: string,
   params: ApolloEnrichPersonParams
 ): Promise<ApolloPerson | null> {
-  const result = await apolloFetch<{ person: ApolloPerson | null }>('/people/match', params as unknown as Record<string, unknown>);
+  const result = await apolloFetch<{ person: ApolloPerson | null }>(
+    apiKey,
+    '/people/match',
+    params as unknown as Record<string, unknown>
+  );
   return result.person;
 }
 
@@ -178,9 +187,10 @@ export async function enrichPerson(
  * Search for organizations matching given criteria.
  */
 export async function searchOrganizations(
+  apiKey: string,
   params: ApolloSearchOrgsParams
 ): Promise<ApolloSearchOrgsResponse> {
-  return apolloFetch<ApolloSearchOrgsResponse>('/mixed_organizations/search', {
+  return apolloFetch<ApolloSearchOrgsResponse>(apiKey, '/mixed_organizations/search', {
     ...params,
     per_page: params.per_page ?? 25,
     page: params.page ?? 1,
@@ -191,9 +201,11 @@ export async function searchOrganizations(
  * Enrich a single organization by domain.
  */
 export async function enrichOrganization(
+  apiKey: string,
   params: ApolloEnrichOrgParams
 ): Promise<ApolloOrganization | null> {
   const result = await apolloFetch<{ organization: ApolloOrganization | null }>(
+    apiKey,
     '/organizations/enrich',
     params as unknown as Record<string, unknown>
   );

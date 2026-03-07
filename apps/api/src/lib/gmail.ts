@@ -28,13 +28,19 @@ interface SendEmailOptions {
   references?: string;
 }
 
+export interface GoogleEnv {
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_REDIRECT_URI?: string;
+}
+
 // ─── OAuth Client ───────────────────────────────────────────────────────────
 
-function getOAuth2Client(accessToken: string, refreshToken?: string) {
+function getOAuth2Client(env: GoogleEnv, accessToken: string, refreshToken?: string) {
   const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI
   );
 
   oauth2Client.setCredentials({
@@ -49,10 +55,11 @@ function getOAuth2Client(accessToken: string, refreshToken?: string) {
  * Create an authenticated Gmail client from user tokens.
  */
 export function getGmailClient(
+  env: GoogleEnv,
   accessToken: string,
   refreshToken?: string
 ): gmail_v1.Gmail {
-  const auth = getOAuth2Client(accessToken, refreshToken);
+  const auth = getOAuth2Client(env, accessToken, refreshToken);
   return google.gmail({ version: 'v1', auth });
 }
 
@@ -79,8 +86,10 @@ function parseAddressList(raw: string): string[] {
 }
 
 function decodeBase64Url(data: string): string {
+  // Use atob() which is available in Cloudflare Workers
   const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(base64, 'base64').toString('utf-8');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return atob(padded);
 }
 
 function extractBody(payload: gmail_v1.Schema$MessagePart): { text: string; html: string | null } {
@@ -217,8 +226,8 @@ export async function sendEmail(
   if (references) headers.push(`References: ${references}`);
 
   const rawMessage = `${headers.join('\r\n')}\r\n\r\n${body}`;
-  const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
+  // Use btoa() which is available in Cloudflare Workers
+  const encodedMessage = btoa(rawMessage)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
@@ -241,11 +250,12 @@ export async function sendEmail(
  * Fetch Google Contacts (People API) for the authenticated user.
  */
 export async function fetchContacts(
+  env: GoogleEnv,
   accessToken: string,
   refreshToken?: string,
   maxResults: number = 1000
 ): Promise<Array<{ name: string; email: string | null; phone: string | null }>> {
-  const auth = getOAuth2Client(accessToken, refreshToken);
+  const auth = getOAuth2Client(env, accessToken, refreshToken);
   const people = google.people({ version: 'v1', auth });
 
   const response = await people.people.connections.list({

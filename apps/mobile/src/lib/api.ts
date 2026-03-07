@@ -1,6 +1,6 @@
-import { supabase } from "./supabase";
+import * as SecureStore from "expo-secure-store";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8787";
 
 type RequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -10,17 +10,16 @@ interface ApiRequestOptions {
   headers?: Record<string, string>;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
-  }
-  return headers;
+async function getToken(): Promise<string | null> {
+  return SecureStore.getItemAsync("mercury_session");
+}
+
+async function setToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync("mercury_session", token);
+}
+
+async function clearToken(): Promise<void> {
+  await SecureStore.deleteItemAsync("mercury_session");
 }
 
 export async function apiRequest<T = unknown>(
@@ -28,14 +27,17 @@ export async function apiRequest<T = unknown>(
   options: ApiRequestOptions = {}
 ): Promise<T> {
   const { method = "GET", body, headers: customHeaders } = options;
-  const authHeaders = await getAuthHeaders();
+  const token = await getToken();
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...customHeaders,
+  };
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
     method,
-    headers: {
-      ...authHeaders,
-      ...customHeaders,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -69,3 +71,5 @@ export const api = {
   delete: <T = unknown>(endpoint: string) =>
     apiRequest<T>(endpoint, { method: "DELETE" }),
 };
+
+export { getToken, setToken, clearToken, API_URL };

@@ -2,8 +2,6 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
-import { addEmailSyncJob, addEnrichmentJob } from '../jobs/index.js';
 import { aiGateway } from '../lib/ai-gateway.js';
 import { searchPeople } from '../lib/apollo.js';
 
@@ -29,66 +27,56 @@ onboarding.post('/start', async (c) => {
   const userId = getUserId(c);
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Verify user exists and hasn't already completed onboarding
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, onboarding_completed')
-      .eq('id', userId)
-      .single();
+    // Verify user exists
+    const user = await db
+      .prepare('SELECT id, onboarding_completed FROM users WHERE id = ?')
+      .bind(userId)
+      .first();
 
-    if (userError || !user) {
+    if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }
 
     // Check for linked Google account
-    const { data: linkedAccount } = await supabase
-      .from('linked_accounts')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('provider', 'google')
-      .eq('is_active', true)
-      .maybeSingle();
+    const linkedAccount = await db
+      .prepare(
+        'SELECT id FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+      )
+      .bind(userId, 'google')
+      .first();
 
-    const jobs: Record<string, string> = {};
+    // Log onboarding start
+    await db
+      .prepare(
+        `INSERT INTO agent_logs (id, user_id, agent_type, action, input, tokens_used, model, cost_cents, duration_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        'orchestrator',
+        'onboarding_started',
+        JSON.stringify({ google_linked: !!linkedAccount }),
+        0,
+        'system',
+        0,
+        0,
+        new Date().toISOString()
+      )
+      .run();
 
-    // Enqueue email pull (if Google is linked)
-    if (linkedAccount) {
-      const emailJobId = await addEmailSyncJob({ userId, fullHistory: true });
-      jobs.email_sync = emailJobId;
-    }
-
-    // Enqueue contact enrichment (will run after email sync populates contacts)
-    const enrichJobId = await addEnrichmentJob({ userId, source: 'onboarding' });
-    jobs.enrichment = enrichJobId;
-
-    // Store onboarding job IDs in user metadata
-    await supabase
-      .from('users')
-      .update({
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-
-    // Store job tracking data
-    await supabase.from('agent_logs').insert({
-      user_id: userId,
-      agent_type: 'orchestrator',
-      action: 'onboarding_started',
-      input: { jobs },
-      output: null,
-      tokens_used: 0,
-      model: 'system',
-      cost_cents: 0,
-      duration_ms: 0,
-      error: null,
-    });
+    // Update user timestamp
+    await db
+      .prepare('UPDATE users SET updated_at = ? WHERE id = ?')
+      .bind(new Date().toISOString(), userId)
+      .run();
 
     return c.json({
       success: true,
-      jobs,
-      message: 'Onboarding jobs enqueued. Poll /onboarding/status for progress.',
+      google_linked: !!linkedAccount,
+      message: 'Onboarding started. Use /sync/email to pull emails, then poll /onboarding/status for progress.',
     });
   } catch (error) {
     console.error('[onboarding/start] Failed:', error);
@@ -102,43 +90,44 @@ onboarding.get('/status', async (c) => {
   const userId = getUserId(c);
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Check various onboarding progress indicators
     const [contactsResult, interactionsResult, linkedAccountResult, userResult] =
       await Promise.all([
-        supabase
-          .from('contacts')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId),
-        supabase
-          .from('interactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId),
-        supabase
-          .from('linked_accounts')
-          .select('provider, is_active')
-          .eq('user_id', userId),
-        supabase
-          .from('users')
-          .select('style_fingerprint, onboarding_completed, mode')
-          .eq('id', userId)
-          .single(),
+        db
+          .prepare('SELECT COUNT(*) as count FROM contacts WHERE user_id = ?')
+          .bind(userId)
+          .first<{ count: number }>(),
+        db
+          .prepare('SELECT COUNT(*) as count FROM interactions WHERE user_id = ?')
+          .bind(userId)
+          .first<{ count: number }>(),
+        db
+          .prepare('SELECT provider, is_active FROM linked_accounts WHERE user_id = ?')
+          .bind(userId)
+          .all(),
+        db
+          .prepare('SELECT style_fingerprint, onboarding_completed, mode FROM users WHERE id = ?')
+          .bind(userId)
+          .first(),
       ]);
 
-    const contactCount = contactsResult.count ?? 0;
-    const interactionCount = interactionsResult.count ?? 0;
-    const linkedAccounts = linkedAccountResult.data ?? [];
-    const user = userResult.data;
+    const contactCount = contactsResult?.count ?? 0;
+    const interactionCount = interactionsResult?.count ?? 0;
+    const linkedAccounts = linkedAccountResult.results ?? [];
+    const user = userResult;
 
     const steps = {
-      google_connected: linkedAccounts.some((a) => a.provider === 'google' && a.is_active),
+      google_connected: linkedAccounts.some(
+        (a) => a.provider === 'google' && a.is_active
+      ),
       email_synced: interactionCount > 0,
       contacts_imported: contactCount > 0,
-      contacts_enriched: contactCount > 5, // rough proxy
+      contacts_enriched: contactCount > 5,
       style_analyzed: !!user?.style_fingerprint,
-      icp_set: !!user?.mode, // rough proxy
-      onboarding_completed: user?.onboarding_completed ?? false,
+      icp_set: !!user?.mode,
+      onboarding_completed: !!(user?.onboarding_completed),
     };
 
     const completedSteps = Object.values(steps).filter(Boolean).length;
@@ -171,21 +160,27 @@ onboarding.post('/icp', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Store ICP preferences -- we use agent_logs to track this
-    await supabase.from('agent_logs').insert({
-      user_id: userId,
-      agent_type: 'orchestrator',
-      action: 'icp_saved',
-      input: parsed.data,
-      output: null,
-      tokens_used: 0,
-      model: 'system',
-      cost_cents: 0,
-      duration_ms: 0,
-      error: null,
-    });
+    // Store ICP preferences in agent_logs
+    await db
+      .prepare(
+        `INSERT INTO agent_logs (id, user_id, agent_type, action, input, tokens_used, model, cost_cents, duration_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        'orchestrator',
+        'icp_saved',
+        JSON.stringify(parsed.data),
+        0,
+        'system',
+        0,
+        0,
+        new Date().toISOString()
+      )
+      .run();
 
     return c.json({
       success: true,
@@ -211,46 +206,57 @@ onboarding.post('/discover', async (c) => {
   const maxResults = parsed.data.max_results ?? 25;
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // 1. Mine inbox for stalled deals -- contacts with old last_interaction_at
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: stalledContacts } = await supabase
-      .from('contacts')
-      .select('id, full_name, email, title, segment, last_interaction_at, companies(name)')
-      .eq('user_id', userId)
-      .lt('last_interaction_at', thirtyDaysAgo)
-      .in('segment', ['hot_lead', 'warm'])
-      .order('relationship_score', { ascending: false })
-      .limit(10);
+    const stalledResult = await db
+      .prepare(
+        `SELECT c.id, c.full_name, c.email, c.title, c.segment, c.last_interaction_at,
+                co.name as company_name
+         FROM contacts c
+         LEFT JOIN companies co ON c.company_id = co.id
+         WHERE c.user_id = ? AND c.last_interaction_at < ? AND c.segment IN ('hot_lead', 'warm')
+         ORDER BY c.relationship_score DESC
+         LIMIT 10`
+      )
+      .bind(userId, thirtyDaysAgo)
+      .all();
 
-    // 2. Search network for warm paths -- contacts with mutual connections
-    const { data: warmPathContacts } = await supabase
-      .from('contacts')
-      .select('id, full_name, email, title, outreach_path, companies(name)')
-      .eq('user_id', userId)
-      .in('outreach_path', ['warm_intro', 'second_degree'])
-      .eq('segment', 'connected')
-      .order('relationship_score', { ascending: false })
-      .limit(10);
+    const stalledContacts = stalledResult.results ?? [];
+
+    // 2. Search network for warm paths
+    const warmPathResult = await db
+      .prepare(
+        `SELECT c.id, c.full_name, c.email, c.title, c.outreach_path,
+                co.name as company_name
+         FROM contacts c
+         LEFT JOIN companies co ON c.company_id = co.id
+         WHERE c.user_id = ? AND c.outreach_path IN ('warm_intro', 'second_degree') AND c.segment = 'connected'
+         ORDER BY c.relationship_score DESC
+         LIMIT 10`
+      )
+      .bind(userId)
+      .all();
+
+    const warmPathContacts = warmPathResult.results ?? [];
 
     // 3. Discover net-new prospects via Apollo
-    // First, fetch the user's ICP from agent_logs
-    const { data: icpLog } = await supabase
-      .from('agent_logs')
-      .select('input')
-      .eq('user_id', userId)
-      .eq('action', 'icp_saved')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const icpLog = await db
+      .prepare(
+        `SELECT input FROM agent_logs WHERE user_id = ? AND action = 'icp_saved' ORDER BY created_at DESC LIMIT 1`
+      )
+      .bind(userId)
+      .first();
 
     let netNewProspects: unknown[] = [];
 
     if (icpLog?.input) {
-      const icp = icpLog.input as Record<string, unknown>;
+      const icp = typeof icpLog.input === 'string'
+        ? JSON.parse(icpLog.input as string)
+        : icpLog.input as Record<string, unknown>;
       try {
-        const apolloResults = await searchPeople({
+        const apolloResults = await searchPeople(c.env.APOLLO_API_KEY, {
           q_person_title: (icp.target_titles as string[])?.join(' OR '),
           person_locations: icp.target_locations as string[] | undefined,
           person_seniorities: ['director', 'vp', 'c_suite'],
@@ -272,8 +278,8 @@ onboarding.post('/discover', async (c) => {
 
     // Use AI to generate a summary
     const discoveryData = {
-      stalled_deals: stalledContacts ?? [],
-      warm_paths: warmPathContacts ?? [],
+      stalled_deals: stalledContacts,
+      warm_paths: warmPathContacts,
       net_new: netNewProspects,
     };
 
@@ -281,6 +287,8 @@ onboarding.post('/discover', async (c) => {
       model: 'haiku',
       userId,
       agentType: 'scout',
+      db,
+      apiKey: c.env.ANTHROPIC_API_KEY,
       messages: [
         {
           role: 'user',
@@ -308,8 +316,8 @@ Respond with JSON: {
 
     return c.json({
       summary,
-      stalled_deals: stalledContacts ?? [],
-      warm_paths: warmPathContacts ?? [],
+      stalled_deals: stalledContacts,
+      warm_paths: warmPathContacts,
       net_new_prospects: netNewProspects,
     });
   } catch (error) {

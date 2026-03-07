@@ -2,8 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
-import { enrichPerson, enrichOrganization, searchPeople } from '../lib/apollo.js';
+import { enrichPerson, searchPeople } from '../lib/apollo.js';
 
 const contacts = new Hono<AuthEnv>();
 
@@ -53,58 +52,86 @@ contacts.get('/', async (c) => {
   const { segment, outreachPath, search, sort, limit = 50, offset = 0 } = parsed.data;
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    let query = supabase
-      .from('contacts')
-      .select('*, companies(id, name, domain, logo_url)', { count: 'exact' })
-      .eq('user_id', userId);
+    // Build query dynamically
+    const whereClauses: string[] = ['c.user_id = ?'];
+    const params: unknown[] = [userId];
 
-    // Apply filters
     if (segment) {
-      query = query.eq('segment', segment);
+      whereClauses.push('c.segment = ?');
+      params.push(segment);
     }
 
     if (outreachPath) {
-      query = query.eq('outreach_path', outreachPath);
+      whereClauses.push('c.outreach_path = ?');
+      params.push(outreachPath);
     }
 
     if (search) {
-      query = query.or(
-        `full_name.ilike.%${search}%,email.ilike.%${search}%,title.ilike.%${search}%`
-      );
+      whereClauses.push('(c.full_name LIKE ? OR c.email LIKE ? OR c.title LIKE ?)');
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    // Apply sorting
+    // Determine sort order
+    let orderBy: string;
     switch (sort) {
       case 'name':
-        query = query.order('full_name', { ascending: true });
+        orderBy = 'c.full_name ASC';
         break;
       case 'score':
-        query = query.order('relationship_score', { ascending: false });
+        orderBy = 'c.relationship_score DESC';
         break;
       case 'last_interaction':
-        query = query.order('last_interaction_at', { ascending: false, nullsFirst: false });
+        orderBy = 'c.last_interaction_at DESC';
         break;
       case 'created':
-        query = query.order('created_at', { ascending: false });
+        orderBy = 'c.created_at DESC';
         break;
       default:
-        query = query.order('relationship_score', { ascending: false });
+        orderBy = 'c.relationship_score DESC';
     }
 
-    // Apply pagination
-    query = query.range(offset, offset + limit - 1);
+    const whereSQL = whereClauses.join(' AND ');
 
-    const { data, error, count } = await query;
+    // Get total count
+    const countResult = await db
+      .prepare(`SELECT COUNT(*) as total FROM contacts c WHERE ${whereSQL}`)
+      .bind(...params)
+      .first<{ total: number }>();
 
-    if (error) {
-      return c.json({ error: 'Failed to fetch contacts' }, 500);
-    }
+    const total = countResult?.total ?? 0;
+
+    // Fetch paginated results with company join
+    const contactsResult = await db
+      .prepare(
+        `SELECT c.*, co.id as company_id_ref, co.name as company_name, co.domain as company_domain, co.logo_url as company_logo_url
+         FROM contacts c
+         LEFT JOIN companies co ON c.company_id = co.id
+         WHERE ${whereSQL}
+         ORDER BY ${orderBy}
+         LIMIT ? OFFSET ?`
+      )
+      .bind(...params, limit, offset)
+      .all();
+
+    // Transform results to include nested company object
+    const contactsData = (contactsResult.results ?? []).map((row) => {
+      const { company_id_ref, company_name, company_domain, company_logo_url, ...contactFields } = row as Record<string, unknown>;
+      return {
+        ...contactFields,
+        tags: typeof contactFields.tags === 'string' ? JSON.parse(contactFields.tags as string) : contactFields.tags,
+        enrichment_data: typeof contactFields.enrichment_data === 'string' ? JSON.parse(contactFields.enrichment_data as string) : contactFields.enrichment_data,
+        companies: company_id_ref
+          ? { id: company_id_ref, name: company_name, domain: company_domain, logo_url: company_logo_url }
+          : null,
+      };
+    });
 
     return c.json({
-      contacts: data ?? [],
-      total: count ?? 0,
+      contacts: contactsData,
+      total,
       limit,
       offset,
     });
@@ -121,50 +148,77 @@ contacts.get('/:id', async (c) => {
   const contactId = c.req.param('id');
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Fetch contact with company
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .select('*, companies(*)')
-      .eq('id', contactId)
-      .eq('user_id', userId)
-      .single();
+    // Fetch contact
+    const contact = await db
+      .prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?')
+      .bind(contactId, userId)
+      .first();
 
-    if (contactError || !contact) {
+    if (!contact) {
       return c.json({ error: 'Contact not found' }, 404);
     }
 
+    // Fetch company if linked
+    let company: Record<string, unknown> | null = null;
+    if (contact.company_id) {
+      company = await db
+        .prepare('SELECT * FROM companies WHERE id = ?')
+        .bind(contact.company_id as string)
+        .first();
+    }
+
     // Fetch recent interactions
-    const { data: interactions } = await supabase
-      .from('interactions')
-      .select('*')
-      .eq('contact_id', contactId)
-      .eq('user_id', userId)
-      .order('occurred_at', { ascending: false })
-      .limit(20);
+    const interactionsResult = await db
+      .prepare(
+        'SELECT * FROM interactions WHERE contact_id = ? AND user_id = ? ORDER BY occurred_at DESC LIMIT 20'
+      )
+      .bind(contactId, userId)
+      .all();
 
     // Fetch pending actions for this contact
-    const { data: pendingActions } = await supabase
-      .from('actions')
-      .select('*')
-      .eq('contact_id', contactId)
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .order('priority', { ascending: true })
-      .limit(5);
+    const pendingActionsResult = await db
+      .prepare(
+        `SELECT * FROM actions WHERE contact_id = ? AND user_id = ? AND status = 'pending'
+         ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END
+         LIMIT 5`
+      )
+      .bind(contactId, userId)
+      .all();
 
     // Fetch pipeline items for this contact
-    const { data: pipelineItems } = await supabase
-      .from('pipeline_items')
-      .select('*, pipelines(id, name, type)')
-      .eq('contact_id', contactId);
+    const pipelineItemsResult = await db
+      .prepare(
+        `SELECT pi.*, p.id as pipeline_id_ref, p.name as pipeline_name, p.type as pipeline_type
+         FROM pipeline_items pi
+         LEFT JOIN pipelines p ON pi.pipeline_id = p.id
+         WHERE pi.contact_id = ?`
+      )
+      .bind(contactId)
+      .all();
+
+    // Parse JSON fields
+    const contactData = {
+      ...contact,
+      tags: typeof contact.tags === 'string' ? JSON.parse(contact.tags as string) : contact.tags,
+      enrichment_data: typeof contact.enrichment_data === 'string' ? JSON.parse(contact.enrichment_data as string) : contact.enrichment_data,
+      companies: company,
+    };
 
     return c.json({
-      contact,
-      interactions: interactions ?? [],
-      pending_actions: pendingActions ?? [],
-      pipeline_items: pipelineItems ?? [],
+      contact: contactData,
+      interactions: interactionsResult.results ?? [],
+      pending_actions: pendingActionsResult.results ?? [],
+      pipeline_items: (pipelineItemsResult.results ?? []).map((pi) => {
+        const { pipeline_id_ref, pipeline_name, pipeline_type, ...itemFields } = pi as Record<string, unknown>;
+        return {
+          ...itemFields,
+          pipelines: pipeline_id_ref
+            ? { id: pipeline_id_ref, name: pipeline_name, type: pipeline_type }
+            : null,
+        };
+      }),
     });
   } catch (error) {
     console.error('[contacts] Failed to fetch contact detail:', error);
@@ -175,7 +229,6 @@ contacts.get('/:id', async (c) => {
 // ─── POST /contacts/search ──────────────────────────────────────────────────
 
 contacts.post('/search', async (c) => {
-  const userId = getUserId(c);
   const body = await c.req.json();
   const parsed = searchContactsSchema.safeParse(body);
 
@@ -186,7 +239,7 @@ contacts.post('/search', async (c) => {
   const { title, company, domains, locations, seniorities, limit = 25 } = parsed.data;
 
   try {
-    const results = await searchPeople({
+    const results = await searchPeople(c.env.APOLLO_API_KEY, {
       q_person_title: title,
       q_organization_name: company,
       q_organization_domains: domains,
@@ -235,26 +288,24 @@ contacts.post('/:id/enrich', async (c) => {
   const contactId = c.req.param('id');
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch the contact
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', contactId)
-      .eq('user_id', userId)
-      .single();
+    const contact = await db
+      .prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?')
+      .bind(contactId, userId)
+      .first();
 
-    if (contactError || !contact) {
+    if (!contact) {
       return c.json({ error: 'Contact not found' }, 404);
     }
 
     // Enrich via Apollo
-    const enriched = await enrichPerson({
-      email: contact.email ?? undefined,
-      first_name: contact.first_name ?? undefined,
-      last_name: contact.last_name ?? undefined,
-      linkedin_url: contact.linkedin_url ?? undefined,
+    const enriched = await enrichPerson(c.env.APOLLO_API_KEY, {
+      email: (contact.email as string) ?? undefined,
+      first_name: (contact.first_name as string) ?? undefined,
+      last_name: (contact.last_name as string) ?? undefined,
+      linkedin_url: (contact.linkedin_url as string) ?? undefined,
     });
 
     if (!enriched) {
@@ -262,70 +313,79 @@ contacts.post('/:id/enrich', async (c) => {
     }
 
     // Update the contact with enriched data
-    const updates: Record<string, unknown> = {
-      title: enriched.title || contact.title,
-      linkedin_url: enriched.linkedin_url || contact.linkedin_url,
-      avatar_url: enriched.photo_url || contact.avatar_url,
-      enrichment_data: enriched as unknown as Record<string, unknown>,
-      updated_at: new Date().toISOString(),
-    };
+    let companyId = contact.company_id as string | null;
 
     // Handle company enrichment
     if (enriched.organization) {
       const org = enriched.organization;
 
-      // Try to find or create the company
-      let companyId = contact.company_id;
-
       if (!companyId && org.website_url) {
-        const { data: existingCompany } = await supabase
-          .from('companies')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('domain', org.website_url)
-          .maybeSingle();
+        const existingCompany = await db
+          .prepare('SELECT id FROM companies WHERE user_id = ? AND domain = ?')
+          .bind(userId, org.website_url)
+          .first<{ id: string }>();
 
         if (existingCompany) {
           companyId = existingCompany.id;
         } else {
-          const { data: newCompany } = await supabase
-            .from('companies')
-            .insert({
-              user_id: userId,
-              name: org.name,
-              domain: org.website_url,
-              industry: org.industry,
-              size: org.estimated_num_employees?.toString() ?? null,
-              logo_url: org.logo_url,
-              linkedin_url: org.linkedin_url,
-              description: org.short_description,
-              enrichment_data: org as unknown as Record<string, unknown>,
-            })
-            .select('id')
-            .single();
-
-          companyId = newCompany?.id ?? null;
+          companyId = crypto.randomUUID();
+          await db
+            .prepare(
+              `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, description, enrichment_data, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+            .bind(
+              companyId,
+              userId,
+              org.name,
+              org.website_url,
+              org.industry,
+              org.estimated_num_employees?.toString() ?? null,
+              org.logo_url,
+              org.linkedin_url,
+              org.short_description,
+              JSON.stringify(org),
+              new Date().toISOString(),
+              new Date().toISOString()
+            )
+            .run();
         }
-      }
-
-      if (companyId) {
-        updates.company_id = companyId;
       }
     }
 
-    const { data: updated, error: updateError } = await supabase
-      .from('contacts')
-      .update(updates)
-      .eq('id', contactId)
-      .select('*, companies(*)')
-      .single();
+    await db
+      .prepare(
+        `UPDATE contacts SET title = ?, linkedin_url = ?, avatar_url = ?, enrichment_data = ?, company_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        enriched.title || (contact.title as string),
+        enriched.linkedin_url || (contact.linkedin_url as string),
+        enriched.photo_url || (contact.avatar_url as string),
+        JSON.stringify(enriched),
+        companyId,
+        new Date().toISOString(),
+        contactId
+      )
+      .run();
 
-    if (updateError) {
-      return c.json({ error: 'Failed to update contact with enrichment data' }, 500);
+    // Fetch updated contact
+    const updated = await db
+      .prepare('SELECT * FROM contacts WHERE id = ?')
+      .bind(contactId)
+      .first();
+
+    // Fetch company
+    let company: Record<string, unknown> | null = null;
+    if (companyId) {
+      company = await db
+        .prepare('SELECT * FROM companies WHERE id = ?')
+        .bind(companyId)
+        .first();
     }
 
     return c.json({
-      contact: updated,
+      contact: { ...updated, companies: company },
       enrichment: enriched,
     });
   } catch (error) {

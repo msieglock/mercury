@@ -1,91 +1,52 @@
-import { supabase } from "./supabase";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import { API_URL, getToken, setToken, clearToken, apiRequest } from "./api";
 
 WebBrowser.maybeCompleteAuthSession();
 
 const redirectUrl = Linking.createURL("/(auth)/callback");
 
-export async function signInWithGoogle() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: redirectUrl,
-      queryParams: {
-        access_type: "offline",
-        prompt: "consent",
-      },
-    },
-  });
+async function handleOAuthFlow(provider: "google" | "microsoft") {
+  const authUrl = `${API_URL}/auth/${provider}?redirect_url=${encodeURIComponent(redirectUrl)}`;
 
-  if (error) throw error;
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
-  if (data?.url) {
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-    if (result.type === "success") {
-      const url = new URL(result.url);
-      const params = new URLSearchParams(url.hash.substring(1));
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
+  if (result.type === "success") {
+    const url = new URL(result.url);
+    const token = url.searchParams.get("token");
 
-      if (accessToken && refreshToken) {
-        await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-      }
+    if (token) {
+      await setToken(token);
     }
   }
+}
+
+export async function signInWithGoogle() {
+  await handleOAuthFlow("google");
 }
 
 export async function signInWithMicrosoft() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "azure",
-    options: {
-      redirectTo: redirectUrl,
-      scopes: "email profile openid",
-    },
-  });
-
-  if (error) throw error;
-
-  if (data?.url) {
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-    if (result.type === "success") {
-      const url = new URL(result.url);
-      const params = new URLSearchParams(url.hash.substring(1));
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
-
-      if (accessToken && refreshToken) {
-        await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-      }
-    }
-  }
+  await handleOAuthFlow("microsoft");
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  await clearToken();
 }
 
 export async function getSession() {
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-  if (error) throw error;
-  return session;
+  const token = await getToken();
+  return token ? { token } : null;
 }
 
 export async function getUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error) throw error;
-  return user;
+  const token = await getToken();
+  if (!token) return null;
+
+  try {
+    return await apiRequest<{ id: string; email: string; name: string }>(
+      "/auth/me"
+    );
+  } catch {
+    return null;
+  }
 }

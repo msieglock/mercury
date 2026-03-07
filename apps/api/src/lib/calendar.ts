@@ -31,13 +31,19 @@ interface CreateEventInput {
   timeZone?: string;
 }
 
+export interface GoogleEnv {
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_REDIRECT_URI?: string;
+}
+
 // ─── OAuth Client ───────────────────────────────────────────────────────────
 
-function getOAuth2Client(accessToken: string, refreshToken?: string) {
+function getOAuth2Client(env: GoogleEnv, accessToken: string, refreshToken?: string) {
   const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI
   );
 
   oauth2Client.setCredentials({
@@ -52,10 +58,11 @@ function getOAuth2Client(accessToken: string, refreshToken?: string) {
  * Create an authenticated Google Calendar client from user tokens.
  */
 export function getCalendarClient(
+  env: GoogleEnv,
   accessToken: string,
   refreshToken?: string
 ): calendar_v3.Calendar {
-  const auth = getOAuth2Client(accessToken, refreshToken);
+  const auth = getOAuth2Client(env, accessToken, refreshToken);
   return google.calendar({ version: 'v3', auth });
 }
 

@@ -1,0 +1,26 @@
+name = "mercury-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+[placement]
+mode = "smart"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mercury-db"
+database_id = "c6540445-bdca-48a8-8039-7e4cbc8717c1"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "8ae91296c2c942b5870c7c95e4d4da39"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "3956e47bff354cedb984c02d832abcc5"
+
+[vars]
+ENVIRONMENT = "production"
+
+[triggers]
+crons = ["*/5 * * * *", "0 * * * *", "0 6 * * *"]

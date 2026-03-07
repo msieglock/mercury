@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
 import { getGmailClient, sendEmail } from '../lib/gmail.js';
 
 const actions = new Hono<AuthEnv>();
@@ -29,73 +28,49 @@ actions.get('/', async (c) => {
   const userId = getUserId(c);
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    const { data, error } = await supabase
-      .from('actions')
-      .select(`
-        *,
-        contacts (
-          id,
-          full_name,
-          title,
-          email,
-          avatar_url,
-          company_id,
-          companies (
-            id,
-            name
-          )
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .order('priority', { ascending: true }) // urgent first
-      .order('due_at', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return c.json({ error: 'Failed to fetch actions' }, 500);
-    }
-
-    // Transform priority to sort order for the client
-    const priorityOrder: Record<string, number> = {
-      urgent: 0,
-      high: 1,
-      medium: 2,
-      low: 3,
-    };
-
-    const sortedActions = (data ?? []).sort((a, b) => {
-      const aPriority = priorityOrder[a.priority] ?? 4;
-      const bPriority = priorityOrder[b.priority] ?? 4;
-      if (aPriority !== bPriority) return aPriority - bPriority;
-
-      // Then by due date (soonest first)
-      if (a.due_at && b.due_at) return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-      if (a.due_at) return -1;
-      if (b.due_at) return 1;
-
-      // Then by created_at (newest first)
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    // Fetch pending actions with contact and company info
+    const actionsResult = await db
+      .prepare(
+        `SELECT a.*,
+                c.id as contact_id_ref, c.full_name as contact_full_name, c.title as contact_title,
+                c.email as contact_email, c.avatar_url as contact_avatar_url, c.company_id as contact_company_id,
+                co.id as company_id_ref, co.name as company_name
+         FROM actions a
+         LEFT JOIN contacts c ON a.contact_id = c.id
+         LEFT JOIN companies co ON c.company_id = co.id
+         WHERE a.user_id = ? AND a.status = 'pending'
+         ORDER BY
+           CASE a.priority
+             WHEN 'urgent' THEN 0
+             WHEN 'high' THEN 1
+             WHEN 'medium' THEN 2
+             WHEN 'low' THEN 3
+             ELSE 4
+           END,
+           a.due_at ASC,
+           a.created_at DESC`
+      )
+      .bind(userId)
+      .all();
 
     // Map to ActionCardType shape
-    const cards = sortedActions.map((action) => ({
+    const cards = (actionsResult.results ?? []).map((action) => ({
       id: action.id,
       type: action.type,
       title: action.title,
       description: action.description,
       priority: action.priority,
       agent_type: action.agent_type,
-      contact_name: action.contacts?.full_name ?? null,
-      contact_title: action.contacts?.title ?? null,
-      company_name: action.contacts?.companies?.name ?? null,
+      contact_name: action.contact_full_name ?? null,
+      contact_title: action.contact_title ?? null,
+      company_name: action.company_name ?? null,
       due_at: action.due_at,
-      primary_action_label: getPrimaryActionLabel(action.type),
+      primary_action_label: getPrimaryActionLabel(action.type as string),
       primary_action_url: null,
-      is_overdue: action.due_at ? new Date(action.due_at) < new Date() : false,
-      metadata: action.metadata,
+      is_overdue: action.due_at ? new Date(action.due_at as string) < new Date() : false,
+      metadata: typeof action.metadata === 'string' ? JSON.parse(action.metadata as string) : action.metadata,
     }));
 
     return c.json({ actions: cards, total: cards.length });
@@ -118,62 +93,63 @@ actions.patch('/:id', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Verify action belongs to user
-    const { data: existing, error: fetchError } = await supabase
-      .from('actions')
-      .select('id')
-      .eq('id', actionId)
-      .eq('user_id', userId)
-      .single();
+    const existing = await db
+      .prepare('SELECT id, metadata FROM actions WHERE id = ? AND user_id = ?')
+      .bind(actionId, userId)
+      .first();
 
-    if (fetchError || !existing) {
+    if (!existing) {
       return c.json({ error: 'Action not found' }, 404);
     }
 
-    const updates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+    const setClauses: string[] = ['updated_at = ?'];
+    const values: unknown[] = [new Date().toISOString()];
 
     if (parsed.data.status) {
-      updates.status = parsed.data.status;
+      setClauses.push('status = ?');
+      values.push(parsed.data.status);
       if (parsed.data.status === 'completed') {
-        updates.completed_at = new Date().toISOString();
+        setClauses.push('completed_at = ?');
+        values.push(new Date().toISOString());
       }
     }
 
     if (parsed.data.snoozed_until) {
-      updates.snoozed_until = parsed.data.snoozed_until;
-      updates.status = 'snoozed';
+      setClauses.push('snoozed_until = ?');
+      values.push(parsed.data.snoozed_until);
+      setClauses.push('status = ?');
+      values.push('snoozed');
     }
 
     // Store draft edits in metadata
     if (parsed.data.draft_subject || parsed.data.draft_body) {
-      const { data: currentAction } = await supabase
-        .from('actions')
-        .select('metadata')
-        .eq('id', actionId)
-        .single();
+      const currentMeta = existing.metadata
+        ? typeof existing.metadata === 'string'
+          ? JSON.parse(existing.metadata as string)
+          : existing.metadata
+        : {};
 
-      const currentMeta = (currentAction?.metadata as Record<string, unknown>) ?? {};
-      updates.metadata = {
+      const updatedMeta = {
         ...currentMeta,
         ...(parsed.data.draft_subject && { draft_subject: parsed.data.draft_subject }),
         ...(parsed.data.draft_body && { draft_body: parsed.data.draft_body }),
       };
+
+      setClauses.push('metadata = ?');
+      values.push(JSON.stringify(updatedMeta));
     }
 
-    const { data: updated, error: updateError } = await supabase
-      .from('actions')
-      .update(updates)
-      .eq('id', actionId)
-      .select()
-      .single();
+    values.push(actionId);
 
-    if (updateError) {
-      return c.json({ error: 'Failed to update action' }, 500);
-    }
+    const updated = await db
+      .prepare(
+        `UPDATE actions SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`
+      )
+      .bind(...values)
+      .first();
 
     return c.json({ action: updated });
   } catch (error) {
@@ -195,24 +171,31 @@ actions.post('/:id/send', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch the action with contact details
-    const { data: action, error: actionError } = await supabase
-      .from('actions')
-      .select('*, contacts(id, email, full_name, phone)')
-      .eq('id', actionId)
-      .eq('user_id', userId)
-      .single();
+    const action = await db
+      .prepare(
+        `SELECT a.*, c.id as contact_ref_id, c.email as contact_email, c.full_name as contact_full_name, c.phone as contact_phone
+         FROM actions a
+         LEFT JOIN contacts c ON a.contact_id = c.id
+         WHERE a.id = ? AND a.user_id = ?`
+      )
+      .bind(actionId, userId)
+      .first();
 
-    if (actionError || !action) {
+    if (!action) {
       return c.json({ error: 'Action not found' }, 404);
     }
 
-    const metadata = (action.metadata as Record<string, unknown>) ?? {};
+    const metadata = action.metadata
+      ? typeof action.metadata === 'string'
+        ? JSON.parse(action.metadata as string)
+        : action.metadata
+      : {};
     const channel = parsed.data.channel ?? 'email';
-    const to = parsed.data.override_to ?? action.contacts?.email;
-    const subject = parsed.data.override_subject ?? (metadata.draft_subject as string) ?? action.title;
+    const to = parsed.data.override_to ?? (action.contact_email as string);
+    const subject = parsed.data.override_subject ?? (metadata.draft_subject as string) ?? (action.title as string);
     const messageBody = parsed.data.override_body ?? (metadata.draft_body as string) ?? '';
 
     if (!to) {
@@ -225,21 +208,21 @@ actions.post('/:id/send', async (c) => {
 
     if (channel === 'email') {
       // Send via Gmail
-      const { data: linkedAccount } = await supabase
-        .from('linked_accounts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('provider', 'google')
-        .eq('is_active', true)
-        .maybeSingle();
+      const linkedAccount = await db
+        .prepare(
+          'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+        )
+        .bind(userId, 'google')
+        .first();
 
       if (!linkedAccount) {
         return c.json({ error: 'No active Google account linked' }, 400);
       }
 
       const gmailClient = getGmailClient(
-        linkedAccount.access_token,
-        linkedAccount.refresh_token ?? undefined
+        c.env,
+        linkedAccount.access_token as string,
+        (linkedAccount.refresh_token as string) ?? undefined
       );
 
       const threadId = (metadata.thread_id as string) ?? undefined;
@@ -252,37 +235,43 @@ actions.post('/:id/send', async (c) => {
       });
 
       // Log the interaction
-      await supabase.from('interactions').insert({
-        user_id: userId,
-        contact_id: action.contact_id,
-        type: 'email_sent',
-        subject,
-        body: messageBody,
-        channel: 'email',
-        metadata: {
-          gmail_id: result.id,
-          thread_id: result.threadId,
-          action_id: actionId,
-        },
-        occurred_at: new Date().toISOString(),
-      });
+      await db
+        .prepare(
+          `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          action.contact_id,
+          'email_sent',
+          subject,
+          messageBody,
+          'email',
+          JSON.stringify({
+            gmail_id: result.id,
+            thread_id: result.threadId,
+            action_id: actionId,
+          }),
+          new Date().toISOString(),
+          new Date().toISOString()
+        )
+        .run();
 
       // Mark action as completed
-      await supabase
-        .from('actions')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', actionId);
+      await db
+        .prepare(
+          'UPDATE actions SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?'
+        )
+        .bind('completed', new Date().toISOString(), new Date().toISOString(), actionId)
+        .run();
 
       // Update contact last interaction
       if (action.contact_id) {
-        await supabase
-          .from('contacts')
-          .update({ last_interaction_at: new Date().toISOString() })
-          .eq('id', action.contact_id);
+        await db
+          .prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
+          .bind(new Date().toISOString(), action.contact_id as string)
+          .run();
       }
 
       return c.json({
@@ -293,7 +282,6 @@ actions.post('/:id/send', async (c) => {
       });
     } else {
       // SMS sending -- placeholder
-      // TODO: Integrate with Twilio for SMS
       return c.json({ error: 'SMS sending not yet implemented' }, 501);
     }
   } catch (error) {

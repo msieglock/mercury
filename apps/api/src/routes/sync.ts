@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
-import { getUser, getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
+import { getUserId } from '../middleware/auth.js';
 import { getGmailClient, fetchNewEmails, fetchSentEmails } from '../lib/gmail.js';
 import { getCalendarClient, fetchEvents } from '../lib/calendar.js';
 import { enrichPerson } from '../lib/apollo.js';
@@ -38,24 +37,24 @@ sync.post('/email', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch user's Google linked account
-    const { data: linkedAccount, error: linkError } = await supabase
-      .from('linked_accounts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('provider', 'google')
-      .eq('is_active', true)
-      .maybeSingle();
+    const linkedAccount = await db
+      .prepare(
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+      )
+      .bind(userId, 'google')
+      .first();
 
-    if (linkError || !linkedAccount) {
+    if (!linkedAccount) {
       return c.json({ error: 'No active Google account linked' }, 400);
     }
 
     const gmailClient = getGmailClient(
-      linkedAccount.access_token,
-      linkedAccount.refresh_token ?? undefined
+      c.env,
+      linkedAccount.access_token as string,
+      (linkedAccount.refresh_token as string) ?? undefined
     );
 
     const since = parsed.data.since
@@ -74,33 +73,39 @@ sync.post('/email', async (c) => {
     // Process new incoming emails
     for (const email of newEmails) {
       // Find or create contact
-      const { data: contact } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('email', email.from)
-        .maybeSingle();
+      const contact = await db
+        .prepare('SELECT id FROM contacts WHERE user_id = ? AND email = ?')
+        .bind(userId, email.from)
+        .first<{ id: string }>();
 
       const contactId = contact?.id ?? null;
 
       // Create interaction record
-      const { error: interactionError } = await supabase.from('interactions').insert({
-        user_id: userId,
-        contact_id: contactId,
-        type: 'email_received',
-        subject: email.subject,
-        body: email.body.substring(0, 5000), // Truncate long emails
-        channel: 'email',
-        metadata: {
-          gmail_id: email.id,
-          thread_id: email.threadId,
-          from: email.from,
-          from_name: email.fromName,
-        },
-        occurred_at: email.date.toISOString(),
-      });
+      const interactionResult = await db
+        .prepare(
+          `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          contactId,
+          'email_received',
+          email.subject,
+          email.body.substring(0, 5000),
+          'email',
+          JSON.stringify({
+            gmail_id: email.id,
+            thread_id: email.threadId,
+            from: email.from,
+            from_name: email.fromName,
+          }),
+          email.date.toISOString(),
+          new Date().toISOString()
+        )
+        .run();
 
-      if (!interactionError) interactionsCreated++;
+      if (interactionResult.success) interactionsCreated++;
 
       // Classify with Haiku for fast triage
       if (contactId) {
@@ -109,6 +114,8 @@ sync.post('/email', async (c) => {
             model: 'haiku',
             userId,
             agentType: 'orchestrator',
+            db,
+            apiKey: c.env.ANTHROPIC_API_KEY,
             messages: [
               {
                 role: 'user',
@@ -126,13 +133,18 @@ Respond with JSON: { "intent": "interested|question|objection|not_now|referral|o
 
           // Create action card if suggested
           if (result.suggested_action) {
-            await supabase.from('actions').insert({
-              user_id: userId,
-              contact_id: contactId,
-              type: result.suggested_action,
-              title: `${result.suggested_action === 'reply_needed' ? 'Reply to' : 'Follow up with'}: ${email.fromName ?? email.from}`,
-              description: result.summary,
-              priority:
+            const actionResult = await db
+              .prepare(
+                `INSERT INTO actions (id, user_id, contact_id, type, title, description, priority, status, agent_type, metadata, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              )
+              .bind(
+                crypto.randomUUID(),
+                userId,
+                contactId,
+                result.suggested_action,
+                `${result.suggested_action === 'reply_needed' ? 'Reply to' : 'Follow up with'}: ${email.fromName ?? email.from}`,
+                result.summary,
                 result.urgency === 'immediate'
                   ? 'urgent'
                   : result.urgency === 'today'
@@ -140,15 +152,18 @@ Respond with JSON: { "intent": "interested|question|objection|not_now|referral|o
                     : result.urgency === 'this_week'
                       ? 'medium'
                       : 'low',
-              status: 'pending',
-              agent_type: 'orchestrator',
-              metadata: {
-                email_id: email.id,
-                thread_id: email.threadId,
-                classification: result,
-              },
-            });
-            actionsCreated++;
+                'pending',
+                'orchestrator',
+                JSON.stringify({
+                  email_id: email.id,
+                  thread_id: email.threadId,
+                  classification: result,
+                }),
+                new Date().toISOString(),
+                new Date().toISOString()
+              )
+              .run();
+            if (actionResult.success) actionsCreated++;
           }
         } catch (classifyError) {
           console.error('[sync/email] Classification failed for email:', email.id, classifyError);
@@ -159,35 +174,41 @@ Respond with JSON: { "intent": "interested|question|objection|not_now|referral|o
     // Process sent emails as interactions
     for (const email of sentEmails) {
       for (const recipient of email.to) {
-        const { data: contact } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('email', recipient)
-          .maybeSingle();
+        const contact = await db
+          .prepare('SELECT id FROM contacts WHERE user_id = ? AND email = ?')
+          .bind(userId, recipient)
+          .first<{ id: string }>();
 
         if (contact) {
-          const { error: interactionError } = await supabase.from('interactions').insert({
-            user_id: userId,
-            contact_id: contact.id,
-            type: 'email_sent',
-            subject: email.subject,
-            body: email.body.substring(0, 5000),
-            channel: 'email',
-            metadata: {
-              gmail_id: email.id,
-              thread_id: email.threadId,
-            },
-            occurred_at: email.date.toISOString(),
-          });
+          const interactionResult = await db
+            .prepare(
+              `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+            .bind(
+              crypto.randomUUID(),
+              userId,
+              contact.id,
+              'email_sent',
+              email.subject,
+              email.body.substring(0, 5000),
+              'email',
+              JSON.stringify({
+                gmail_id: email.id,
+                thread_id: email.threadId,
+              }),
+              email.date.toISOString(),
+              new Date().toISOString()
+            )
+            .run();
 
-          if (!interactionError) interactionsCreated++;
+          if (interactionResult.success) interactionsCreated++;
 
           // Update last interaction
-          await supabase
-            .from('contacts')
-            .update({ last_interaction_at: email.date.toISOString() })
-            .eq('id', contact.id);
+          await db
+            .prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
+            .bind(email.date.toISOString(), contact.id)
+            .run();
         }
       }
     }
@@ -218,24 +239,24 @@ sync.post('/calendar', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch user's Google linked account
-    const { data: linkedAccount, error: linkError } = await supabase
-      .from('linked_accounts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('provider', 'google')
-      .eq('is_active', true)
-      .maybeSingle();
+    const linkedAccount = await db
+      .prepare(
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+      )
+      .bind(userId, 'google')
+      .first();
 
-    if (linkError || !linkedAccount) {
+    if (!linkedAccount) {
       return c.json({ error: 'No active Google account linked' }, 400);
     }
 
     const calendarClient = getCalendarClient(
-      linkedAccount.access_token,
-      linkedAccount.refresh_token ?? undefined
+      c.env,
+      linkedAccount.access_token as string,
+      (linkedAccount.refresh_token as string) ?? undefined
     );
 
     const now = new Date();
@@ -259,39 +280,52 @@ sync.post('/calendar', async (c) => {
 
       if (attendeeEmails.length === 0) continue;
 
-      const { data: matchedContacts } = await supabase
-        .from('contacts')
-        .select('id, full_name, email, title, company_id')
-        .eq('user_id', userId)
-        .in('email', attendeeEmails);
+      // Query contacts matching attendee emails
+      const placeholders = attendeeEmails.map(() => '?').join(',');
+      const matchedContacts = await db
+        .prepare(
+          `SELECT id, full_name, email, title, company_id FROM contacts
+           WHERE user_id = ? AND email IN (${placeholders})`
+        )
+        .bind(userId, ...attendeeEmails)
+        .all<{ id: string; full_name: string; email: string; title: string | null; company_id: string | null }>();
 
-      if (matchedContacts && matchedContacts.length > 0) {
+      if (matchedContacts.results.length > 0) {
         // Create meeting prep action for the first matched contact
-        const primaryContact = matchedContacts[0];
+        const primaryContact = matchedContacts.results[0];
 
-        const { error: actionError } = await supabase.from('actions').insert({
-          user_id: userId,
-          contact_id: primaryContact.id,
-          type: 'meeting_prep',
-          title: `Prep for: ${event.summary}`,
-          description: `Meeting with ${matchedContacts.map((c) => c.full_name).join(', ')} on ${event.start.toLocaleDateString()}`,
-          priority: 'medium',
-          status: 'pending',
-          agent_type: 'orchestrator',
-          due_at: new Date(event.start.getTime() - 30 * 60 * 1000).toISOString(), // 30 min before
-          metadata: {
-            event_id: event.id,
-            event_summary: event.summary,
-            event_start: event.start.toISOString(),
-            attendees: attendeeEmails,
-            matched_contacts: matchedContacts.map((mc) => ({
-              id: mc.id,
-              name: mc.full_name,
-            })),
-          },
-        });
+        const actionResult = await db
+          .prepare(
+            `INSERT INTO actions (id, user_id, contact_id, type, title, description, priority, status, agent_type, due_at, metadata, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            crypto.randomUUID(),
+            userId,
+            primaryContact.id,
+            'meeting_prep',
+            `Prep for: ${event.summary}`,
+            `Meeting with ${matchedContacts.results.map((c) => c.full_name).join(', ')} on ${event.start.toLocaleDateString()}`,
+            'medium',
+            'pending',
+            'orchestrator',
+            new Date(event.start.getTime() - 30 * 60 * 1000).toISOString(),
+            JSON.stringify({
+              event_id: event.id,
+              event_summary: event.summary,
+              event_start: event.start.toISOString(),
+              attendees: attendeeEmails,
+              matched_contacts: matchedContacts.results.map((mc) => ({
+                id: mc.id,
+                name: mc.full_name,
+              })),
+            }),
+            new Date().toISOString(),
+            new Date().toISOString()
+          )
+          .run();
 
-        if (!actionError) actionsCreated++;
+        if (actionResult.success) actionsCreated++;
       }
     }
 
@@ -320,16 +354,20 @@ sync.post('/contacts', async (c) => {
   const { contact_ids } = parsed.data;
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch contacts to enrich
-    const { data: contacts, error: fetchError } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('user_id', userId)
-      .in('id', contact_ids);
+    const placeholders = contact_ids.map(() => '?').join(',');
+    const contactsResult = await db
+      .prepare(
+        `SELECT * FROM contacts WHERE user_id = ? AND id IN (${placeholders})`
+      )
+      .bind(userId, ...contact_ids)
+      .all();
 
-    if (fetchError || !contacts) {
+    const contacts = contactsResult.results;
+
+    if (!contacts || contacts.length === 0) {
       return c.json({ error: 'Failed to fetch contacts' }, 500);
     }
 
@@ -338,90 +376,103 @@ sync.post('/contacts', async (c) => {
 
     for (const contact of contacts) {
       try {
-        const enriched = await enrichPerson({
-          email: contact.email ?? undefined,
-          first_name: contact.first_name ?? undefined,
-          last_name: contact.last_name ?? undefined,
-          linkedin_url: contact.linkedin_url ?? undefined,
+        const enriched = await enrichPerson(c.env.APOLLO_API_KEY, {
+          email: (contact.email as string) ?? undefined,
+          first_name: (contact.first_name as string) ?? undefined,
+          last_name: (contact.last_name as string) ?? undefined,
+          linkedin_url: (contact.linkedin_url as string) ?? undefined,
         });
 
         if (enriched) {
           // Update contact with enrichment data
-          await supabase
-            .from('contacts')
-            .update({
-              title: enriched.title || contact.title,
-              linkedin_url: enriched.linkedin_url || contact.linkedin_url,
-              avatar_url: enriched.photo_url || contact.avatar_url,
-              enrichment_data: enriched as unknown as Record<string, unknown>,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', contact.id);
+          await db
+            .prepare(
+              `UPDATE contacts SET title = ?, linkedin_url = ?, avatar_url = ?, enrichment_data = ?, updated_at = ?
+               WHERE id = ?`
+            )
+            .bind(
+              enriched.title || (contact.title as string),
+              enriched.linkedin_url || (contact.linkedin_url as string),
+              enriched.photo_url || (contact.avatar_url as string),
+              JSON.stringify(enriched),
+              new Date().toISOString(),
+              contact.id as string
+            )
+            .run();
 
           // If we got organization data, upsert the company
           if (enriched.organization) {
             const org = enriched.organization;
-            const { data: existingCompany } = await supabase
-              .from('companies')
-              .select('id')
-              .eq('user_id', userId)
-              .eq('domain', org.website_url ?? '')
-              .maybeSingle();
 
-            if (existingCompany) {
-              await supabase
-                .from('companies')
-                .update({
-                  name: org.name,
-                  industry: org.industry,
-                  size: org.estimated_num_employees?.toString() ?? null,
-                  logo_url: org.logo_url,
-                  linkedin_url: org.linkedin_url,
-                  description: org.short_description,
-                  enrichment_data: org as unknown as Record<string, unknown>,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', existingCompany.id);
+            if (org.website_url) {
+              const existingCompany = await db
+                .prepare('SELECT id FROM companies WHERE user_id = ? AND domain = ?')
+                .bind(userId, org.website_url)
+                .first<{ id: string }>();
 
-              // Link contact to company
-              await supabase
-                .from('contacts')
-                .update({ company_id: existingCompany.id })
-                .eq('id', contact.id);
-            } else if (org.website_url) {
-              const { data: newCompany } = await supabase
-                .from('companies')
-                .insert({
-                  user_id: userId,
-                  name: org.name,
-                  domain: org.website_url,
-                  industry: org.industry,
-                  size: org.estimated_num_employees?.toString() ?? null,
-                  logo_url: org.logo_url,
-                  linkedin_url: org.linkedin_url,
-                  description: org.short_description,
-                  enrichment_data: org as unknown as Record<string, unknown>,
-                })
-                .select('id')
-                .single();
+              if (existingCompany) {
+                await db
+                  .prepare(
+                    `UPDATE companies SET name = ?, industry = ?, size = ?, logo_url = ?, linkedin_url = ?, description = ?, enrichment_data = ?, updated_at = ?
+                     WHERE id = ?`
+                  )
+                  .bind(
+                    org.name,
+                    org.industry,
+                    org.estimated_num_employees?.toString() ?? null,
+                    org.logo_url,
+                    org.linkedin_url,
+                    org.short_description,
+                    JSON.stringify(org),
+                    new Date().toISOString(),
+                    existingCompany.id
+                  )
+                  .run();
 
-              if (newCompany) {
-                await supabase
-                  .from('contacts')
-                  .update({ company_id: newCompany.id })
-                  .eq('id', contact.id);
+                // Link contact to company
+                await db
+                  .prepare('UPDATE contacts SET company_id = ? WHERE id = ?')
+                  .bind(existingCompany.id, contact.id as string)
+                  .run();
+              } else {
+                const companyId = crypto.randomUUID();
+                await db
+                  .prepare(
+                    `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, description, enrichment_data, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                  )
+                  .bind(
+                    companyId,
+                    userId,
+                    org.name,
+                    org.website_url,
+                    org.industry,
+                    org.estimated_num_employees?.toString() ?? null,
+                    org.logo_url,
+                    org.linkedin_url,
+                    org.short_description,
+                    JSON.stringify(org),
+                    new Date().toISOString(),
+                    new Date().toISOString()
+                  )
+                  .run();
+
+                await db
+                  .prepare('UPDATE contacts SET company_id = ? WHERE id = ?')
+                  .bind(companyId, contact.id as string)
+                  .run();
               }
             }
           }
 
           enrichedCount++;
-          results.push({ contact_id: contact.id, enriched: true });
+          results.push({ contact_id: contact.id as string, enriched: true });
         } else {
-          results.push({ contact_id: contact.id, enriched: false, error: 'No match found' });
+          results.push({ contact_id: contact.id as string, enriched: false, error: 'No match found' });
         }
       } catch (enrichError) {
         const errorMsg = enrichError instanceof Error ? enrichError.message : 'Unknown error';
-        results.push({ contact_id: contact.id, enriched: false, error: errorMsg });
+        results.push({ contact_id: contact.id as string, enriched: false, error: errorMsg });
       }
     }
 

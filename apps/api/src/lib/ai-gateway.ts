@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getServiceClient } from './supabase.js';
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type ModelAlias = 'sonnet' | 'haiku';
@@ -12,6 +12,8 @@ interface AIGatewayOptions {
   userId?: string;
   agentType?: string;
   maxTokens?: number;
+  db?: D1Database;
+  apiKey: string;
 }
 
 interface AIGatewayResponse {
@@ -38,19 +40,6 @@ const COST_PER_1K: Record<ModelAlias, { input: number; output: number }> = {
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
-// ─── Client ─────────────────────────────────────────────────────────────────
-
-let _client: Anthropic | null = null;
-
-function getClient(): Anthropic {
-  if (!_client) {
-    _client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY!,
-    });
-  }
-  return _client;
-}
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function calculateCost(
@@ -67,6 +56,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function logToAgentLogs(
+  db: D1Database | undefined,
   userId: string | undefined,
   agentType: string | undefined,
   model: string,
@@ -75,20 +65,25 @@ async function logToAgentLogs(
   durationMs: number,
   error: string | null
 ): Promise<void> {
+  if (!db) return;
+
   try {
-    const supabase = getServiceClient();
-    await supabase.from('agent_logs').insert({
-      user_id: userId,
-      agent_type: agentType ?? 'orchestrator',
-      action: 'ai_gateway_call',
-      input: null,
-      output: null,
-      tokens_used: tokensUsed.input + tokensUsed.output,
-      model,
-      cost_cents: costCents,
-      duration_ms: durationMs,
-      error,
-    });
+    await db
+      .prepare(
+        `INSERT INTO agent_logs (user_id, agent_type, action, tokens_used, model, cost_cents, duration_ms, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        userId ?? null,
+        agentType ?? 'orchestrator',
+        'ai_gateway_call',
+        tokensUsed.input + tokensUsed.output,
+        model,
+        costCents,
+        durationMs,
+        error
+      )
+      .run();
   } catch (logError) {
     console.error('[ai-gateway] Failed to log to agent_logs:', logError);
   }
@@ -108,10 +103,12 @@ export async function aiGateway(options: AIGatewayOptions): Promise<AIGatewayRes
     userId,
     agentType,
     maxTokens = 4096,
+    db,
+    apiKey,
   } = options;
 
   const modelId = MODEL_MAP[modelAlias];
-  const client = getClient();
+  const client = new Anthropic({ apiKey });
 
   let lastError: Error | null = null;
 
@@ -139,7 +136,7 @@ export async function aiGateway(options: AIGatewayOptions): Promise<AIGatewayRes
         .join('');
 
       // Log in background -- don't block the response
-      logToAgentLogs(userId, agentType, modelId, tokensUsed, costCents, durationMs, null);
+      logToAgentLogs(db, userId, agentType, modelId, tokensUsed, costCents, durationMs, null);
 
       return {
         content: textContent,
@@ -159,6 +156,7 @@ export async function aiGateway(options: AIGatewayOptions): Promise<AIGatewayRes
 
       // Log the error
       logToAgentLogs(
+        db,
         userId,
         agentType,
         modelId,
@@ -199,10 +197,12 @@ export async function* aiGatewayStream(
     userId,
     agentType,
     maxTokens = 4096,
+    db,
+    apiKey,
   } = options;
 
   const modelId = MODEL_MAP[modelAlias];
-  const client = getClient();
+  const client = new Anthropic({ apiKey });
   const startTime = Date.now();
 
   let totalInputTokens = 0;
@@ -233,6 +233,7 @@ export async function* aiGatewayStream(
     const costCents = calculateCost(modelAlias, totalInputTokens, totalOutputTokens);
 
     logToAgentLogs(
+      db,
       userId,
       agentType,
       modelId,
@@ -246,6 +247,7 @@ export async function* aiGatewayStream(
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     logToAgentLogs(
+      db,
       userId,
       agentType,
       modelId,

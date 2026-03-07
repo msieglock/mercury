@@ -1,11 +1,25 @@
 import { createMiddleware } from 'hono/factory';
 import type { Context, MiddlewareHandler } from 'hono';
-import { createUserClient, getServiceClient } from '../lib/supabase.js';
 import type { User } from '@mercury/shared/types';
+
+// ─── Bindings type ──────────────────────────────────────────────────────────
+
+export type Bindings = {
+  DB: D1Database;
+  SESSIONS: KVNamespace;
+  CACHE: KVNamespace;
+  ANTHROPIC_API_KEY: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_REDIRECT_URI: string;
+  APOLLO_API_KEY: string;
+  ENVIRONMENT: string;
+};
 
 // ─── Env type for Hono context ──────────────────────────────────────────────
 
 export interface AuthEnv {
+  Bindings: Bindings;
   Variables: {
     user: User;
     token: string;
@@ -13,10 +27,19 @@ export interface AuthEnv {
   };
 }
 
+// ─── Session data stored in KV ──────────────────────────────────────────────
+
+interface SessionData {
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 // ─── Auth Middleware ─────────────────────────────────────────────────────────
 
 /**
- * Hono middleware that verifies a Bearer token via Supabase Auth
+ * Hono middleware that verifies a session token via KV lookup
  * and attaches the authenticated user to the request context.
  *
  * Usage:
@@ -37,33 +60,45 @@ export const authMiddleware: MiddlewareHandler<AuthEnv> = createMiddleware<AuthE
     }
 
     try {
-      // Verify the JWT with Supabase
-      const supabase = createUserClient(token);
-      const {
-        data: { user: authUser },
-        error: authError,
-      } = await supabase.auth.getUser();
+      // Look up session in KV
+      const sessionJson = await c.env.SESSIONS.get(`session:${token}`);
 
-      if (authError || !authUser) {
+      if (!sessionJson) {
         return c.json({ error: 'Invalid or expired token' }, 401);
       }
 
-      // Fetch the full user profile from our users table
-      const serviceClient = getServiceClient();
-      const { data: userProfile, error: profileError } = await serviceClient
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+      const session: SessionData = JSON.parse(sessionJson);
 
-      if (profileError || !userProfile) {
+      // Check expiry
+      if (new Date(session.expiresAt) < new Date()) {
+        // Clean up expired session
+        await c.env.SESSIONS.delete(`session:${token}`);
+        return c.json({ error: 'Token expired' }, 401);
+      }
+
+      // Fetch the full user profile from D1
+      const userProfile = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE id = ?'
+      )
+        .bind(session.userId)
+        .first();
+
+      if (!userProfile) {
         return c.json({ error: 'User profile not found' }, 404);
       }
 
+      // Parse JSON fields that D1 returns as strings
+      const user: User = {
+        ...userProfile,
+        style_fingerprint: typeof userProfile.style_fingerprint === 'string'
+          ? JSON.parse(userProfile.style_fingerprint)
+          : userProfile.style_fingerprint ?? null,
+      } as unknown as User;
+
       // Attach user data to context
-      c.set('user', userProfile as User);
+      c.set('user', user);
       c.set('token', token);
-      c.set('userId', authUser.id);
+      c.set('userId', session.userId);
 
       await next();
     } catch (error) {
@@ -86,4 +121,40 @@ export function getUserId(c: Context<AuthEnv>): string {
 
 export function getToken(c: Context<AuthEnv>): string {
   return c.get('token');
+}
+
+/**
+ * Create a new session in KV and return the session token.
+ * Sessions expire after 30 days by default.
+ */
+export async function createSession(
+  kv: KVNamespace,
+  userId: string,
+  email: string,
+  ttlDays: number = 30
+): Promise<string> {
+  const token = crypto.randomUUID();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
+
+  const sessionData: SessionData = {
+    userId,
+    email,
+    createdAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  };
+
+  // Store in KV with automatic expiration
+  await kv.put(`session:${token}`, JSON.stringify(sessionData), {
+    expirationTtl: ttlDays * 24 * 60 * 60,
+  });
+
+  return token;
+}
+
+/**
+ * Delete a session from KV (logout).
+ */
+export async function deleteSession(kv: KVNamespace, token: string): Promise<void> {
+  await kv.delete(`session:${token}`);
 }

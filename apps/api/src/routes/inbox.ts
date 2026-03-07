@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
 import { getGmailClient, sendEmail } from '../lib/gmail.js';
 import { aiGateway } from '../lib/ai-gateway.js';
 
@@ -24,34 +23,26 @@ inbox.get('/', async (c) => {
   const offset = parseInt(c.req.query('offset') ?? '0', 10);
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Fetch interactions grouped by thread/contact, most recent first
-    const { data: interactions, error } = await supabase
-      .from('interactions')
-      .select(`
-        *,
-        contacts (
-          id,
-          full_name,
-          email,
-          avatar_url,
-          title,
-          company_id,
-          companies (
-            id,
-            name
-          )
-        )
-      `)
-      .eq('user_id', userId)
-      .in('type', ['email_sent', 'email_received', 'sms_sent', 'sms_received'])
-      .order('occurred_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    // Fetch interactions with contact and company info
+    const interactionsResult = await db
+      .prepare(
+        `SELECT i.*,
+                c.id as contact_id_ref, c.full_name as contact_full_name, c.email as contact_email,
+                c.avatar_url as contact_avatar_url, c.title as contact_title, c.company_id as contact_company_id,
+                co.id as company_id_ref, co.name as company_name
+         FROM interactions i
+         LEFT JOIN contacts c ON i.contact_id = c.id
+         LEFT JOIN companies co ON c.company_id = co.id
+         WHERE i.user_id = ? AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
+         ORDER BY i.occurred_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(userId, limit, offset)
+      .all();
 
-    if (error) {
-      return c.json({ error: 'Failed to fetch inbox' }, 500);
-    }
+    const interactions = interactionsResult.results ?? [];
 
     // Group by thread_id (from metadata) or contact_id
     const threadMap = new Map<
@@ -67,27 +58,39 @@ inbox.get('/', async (c) => {
       }
     >();
 
-    for (const interaction of interactions ?? []) {
-      const meta = interaction.metadata as Record<string, unknown> | null;
+    for (const interaction of interactions) {
+      const meta = typeof interaction.metadata === 'string'
+        ? JSON.parse(interaction.metadata as string)
+        : (interaction.metadata as Record<string, unknown> | null);
       const threadId =
-        (meta?.thread_id as string) ?? interaction.contact_id ?? interaction.id;
+        (meta?.thread_id as string) ?? (interaction.contact_id as string) ?? (interaction.id as string);
 
       if (!threadMap.has(threadId)) {
+        const contactObj = interaction.contact_id_ref ? {
+          id: interaction.contact_id_ref,
+          full_name: interaction.contact_full_name,
+          email: interaction.contact_email,
+          avatar_url: interaction.contact_avatar_url,
+          title: interaction.contact_title,
+          company_id: interaction.contact_company_id,
+          companies: interaction.company_id_ref ? { id: interaction.company_id_ref, name: interaction.company_name } : null,
+        } : null;
+
         threadMap.set(threadId, {
           thread_id: threadId,
-          contact: interaction.contacts,
+          contact: contactObj,
           last_message: {
             id: interaction.id,
             type: interaction.type,
             subject: interaction.subject,
-            body: (interaction.body ?? '').substring(0, 200),
+            body: ((interaction.body as string) ?? '').substring(0, 200),
             occurred_at: interaction.occurred_at,
             sentiment: interaction.sentiment,
           },
           message_count: 1,
-          last_activity: interaction.occurred_at,
+          last_activity: interaction.occurred_at as string,
           has_unread: interaction.type === 'email_received' || interaction.type === 'sms_received',
-          channel: interaction.channel ?? 'email',
+          channel: (interaction.channel as string) ?? 'email',
         });
       } else {
         const thread = threadMap.get(threadId)!;
@@ -118,40 +121,57 @@ inbox.get('/:threadId', async (c) => {
   const threadId = c.req.param('threadId');
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch all messages in this thread
-    const { data: messages, error } = await supabase
-      .from('interactions')
-      .select(`
-        *,
-        contacts (
-          id,
-          full_name,
-          email,
-          avatar_url,
-          title
-        )
-      `)
-      .eq('user_id', userId)
-      .or(
-        `metadata->>thread_id.eq.${threadId},contact_id.eq.${threadId}`
+    // Match by thread_id in metadata JSON or by contact_id
+    const messagesResult = await db
+      .prepare(
+        `SELECT i.*,
+                c.id as contact_id_ref, c.full_name as contact_full_name, c.email as contact_email,
+                c.avatar_url as contact_avatar_url, c.title as contact_title
+         FROM interactions i
+         LEFT JOIN contacts c ON i.contact_id = c.id
+         WHERE i.user_id = ?
+           AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
+           AND (json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
+         ORDER BY i.occurred_at ASC`
       )
-      .in('type', ['email_sent', 'email_received', 'sms_sent', 'sms_received'])
-      .order('occurred_at', { ascending: true });
+      .bind(userId, threadId, threadId)
+      .all();
 
-    if (error) {
-      return c.json({ error: 'Failed to fetch thread' }, 500);
-    }
+    const messages = messagesResult.results ?? [];
 
-    if (!messages || messages.length === 0) {
+    if (messages.length === 0) {
       return c.json({ error: 'Thread not found' }, 404);
     }
 
+    const firstMessage = messages[0];
+    const contact = firstMessage.contact_id_ref ? {
+      id: firstMessage.contact_id_ref,
+      full_name: firstMessage.contact_full_name,
+      email: firstMessage.contact_email,
+      avatar_url: firstMessage.contact_avatar_url,
+      title: firstMessage.contact_title,
+    } : null;
+
+    // Parse metadata in messages
+    const parsedMessages = messages.map((m) => ({
+      ...m,
+      metadata: typeof m.metadata === 'string' ? JSON.parse(m.metadata as string) : m.metadata,
+      contacts: m.contact_id_ref ? {
+        id: m.contact_id_ref,
+        full_name: m.contact_full_name,
+        email: m.contact_email,
+        avatar_url: m.contact_avatar_url,
+        title: m.contact_title,
+      } : null,
+    }));
+
     return c.json({
       thread_id: threadId,
-      messages,
-      contact: messages[0].contacts,
+      messages: parsedMessages,
+      contact,
       message_count: messages.length,
     });
   } catch (error) {
@@ -173,27 +193,31 @@ inbox.post('/:threadId/reply', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Get the latest message in the thread to know who to reply to
-    const { data: threadMessages } = await supabase
-      .from('interactions')
-      .select('*, contacts(id, email, full_name)')
-      .eq('user_id', userId)
-      .or(
-        `metadata->>thread_id.eq.${threadId},contact_id.eq.${threadId}`
+    // Get the latest messages in the thread to know who to reply to
+    const threadMessagesResult = await db
+      .prepare(
+        `SELECT i.*, c.id as contact_ref_id, c.email as contact_email, c.full_name as contact_full_name
+         FROM interactions i
+         LEFT JOIN contacts c ON i.contact_id = c.id
+         WHERE i.user_id = ?
+           AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
+           AND (json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
+         ORDER BY i.occurred_at DESC
+         LIMIT 5`
       )
-      .in('type', ['email_sent', 'email_received', 'sms_sent', 'sms_received'])
-      .order('occurred_at', { ascending: false })
-      .limit(5);
+      .bind(userId, threadId, threadId)
+      .all();
 
-    if (!threadMessages || threadMessages.length === 0) {
+    const threadMessages = threadMessagesResult.results ?? [];
+
+    if (threadMessages.length === 0) {
       return c.json({ error: 'Thread not found' }, 404);
     }
 
     const latestMessage = threadMessages[0];
-    const contact = latestMessage.contacts;
-    const recipientEmail = contact?.email;
+    const recipientEmail = latestMessage.contact_email as string | null;
 
     if (!recipientEmail) {
       return c.json({ error: 'No email address found for this contact' }, 400);
@@ -205,19 +229,26 @@ inbox.post('/:threadId/reply', async (c) => {
     if (parsed.data.use_ai_draft) {
       const conversationContext = threadMessages
         .reverse()
-        .map((m) => `[${m.type}] ${m.occurred_at}: ${m.body?.substring(0, 500)}`)
+        .map((m) => `[${m.type}] ${m.occurred_at}: ${((m.body as string) ?? '').substring(0, 500)}`)
         .join('\n\n');
 
-      const { data: user } = await supabase
-        .from('users')
-        .select('style_fingerprint')
-        .eq('id', userId)
-        .single();
+      const user = await db
+        .prepare('SELECT style_fingerprint FROM users WHERE id = ?')
+        .bind(userId)
+        .first();
+
+      const styleFingerprint = user?.style_fingerprint
+        ? typeof user.style_fingerprint === 'string'
+          ? JSON.parse(user.style_fingerprint as string)
+          : user.style_fingerprint
+        : null;
 
       const response = await aiGateway({
         model: 'sonnet',
         userId,
         agentType: 'composer',
+        db,
+        apiKey: c.env.ANTHROPIC_API_KEY,
         messages: [
           {
             role: 'user',
@@ -233,8 +264,8 @@ ${parsed.data.body ? `Use this as the starting point/rough draft: ${parsed.data.
 Write just the reply body, no subject line needed. Match the user's natural tone.`,
           },
         ],
-        system: user?.style_fingerprint
-          ? `Match this writing style: ${JSON.stringify(user.style_fingerprint)}`
+        system: styleFingerprint
+          ? `Match this writing style: ${JSON.stringify(styleFingerprint)}`
           : 'Write in a professional, conversational tone.',
       });
 
@@ -242,54 +273,64 @@ Write just the reply body, no subject line needed. Match the user's natural tone
     }
 
     // Send the reply via Gmail
-    const { data: linkedAccount } = await supabase
-      .from('linked_accounts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('provider', 'google')
-      .eq('is_active', true)
-      .maybeSingle();
+    const linkedAccount = await db
+      .prepare(
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+      )
+      .bind(userId, 'google')
+      .first();
 
     if (!linkedAccount) {
       return c.json({ error: 'No active Google account linked' }, 400);
     }
 
     const gmailClient = getGmailClient(
-      linkedAccount.access_token,
-      linkedAccount.refresh_token ?? undefined
+      c.env,
+      linkedAccount.access_token as string,
+      (linkedAccount.refresh_token as string) ?? undefined
     );
 
-    const meta = latestMessage.metadata as Record<string, unknown> | null;
+    const meta = typeof latestMessage.metadata === 'string'
+      ? JSON.parse(latestMessage.metadata as string)
+      : (latestMessage.metadata as Record<string, unknown> | null);
     const gmailThreadId = (meta?.thread_id as string) ?? undefined;
 
     const result = await sendEmail(gmailClient, {
       to: recipientEmail,
-      subject: `Re: ${latestMessage.subject ?? '(no subject)'}`,
+      subject: `Re: ${(latestMessage.subject as string) ?? '(no subject)'}`,
       body: replyBody,
       threadId: gmailThreadId,
     });
 
     // Log the interaction
-    await supabase.from('interactions').insert({
-      user_id: userId,
-      contact_id: contact?.id ?? null,
-      type: 'email_sent',
-      subject: `Re: ${latestMessage.subject ?? '(no subject)'}`,
-      body: replyBody,
-      channel: 'email',
-      metadata: {
-        gmail_id: result.id,
-        thread_id: result.threadId,
-      },
-      occurred_at: new Date().toISOString(),
-    });
+    await db
+      .prepare(
+        `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        latestMessage.contact_ref_id ?? null,
+        'email_sent',
+        `Re: ${(latestMessage.subject as string) ?? '(no subject)'}`,
+        replyBody,
+        'email',
+        JSON.stringify({
+          gmail_id: result.id,
+          thread_id: result.threadId,
+        }),
+        new Date().toISOString(),
+        new Date().toISOString()
+      )
+      .run();
 
     // Update contact last interaction
-    if (contact?.id) {
-      await supabase
-        .from('contacts')
-        .update({ last_interaction_at: new Date().toISOString() })
-        .eq('id', contact.id);
+    if (latestMessage.contact_ref_id) {
+      await db
+        .prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
+        .bind(new Date().toISOString(), latestMessage.contact_ref_id as string)
+        .run();
     }
 
     return c.json({

@@ -1,10 +1,9 @@
-import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
 
-import { authMiddleware, type AuthEnv } from './middleware/auth.js';
+import { authMiddleware, type AuthEnv, type Bindings } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import syncRoutes from './routes/sync.js';
 import aiRoutes from './routes/ai.js';
@@ -13,11 +12,11 @@ import contactsRoutes from './routes/contacts.js';
 import pipelinesRoutes from './routes/pipelines.js';
 import inboxRoutes from './routes/inbox.js';
 import onboardingRoutes from './routes/onboarding.js';
-import { initScheduler } from './jobs/scheduler.js';
+import { handleScheduled } from './jobs/scheduled.js';
 
 // ─── App ────────────────────────────────────────────────────────────────────
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
 
 // ─── Global Middleware ──────────────────────────────────────────────────────
 
@@ -29,7 +28,6 @@ app.use(
       'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:8081',
-      process.env.WEB_URL ?? 'http://localhost:3000',
     ],
     allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -71,7 +69,7 @@ app.onError((err, c) => {
   return c.json(
     {
       error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      message: c.env.ENVIRONMENT === 'development' ? err.message : undefined,
     },
     500
   );
@@ -83,6 +81,7 @@ app.get('/health', (c) => {
   return c.json({
     status: 'ok',
     service: 'mercury-api',
+    runtime: 'cloudflare-workers',
     timestamp: new Date().toISOString(),
   });
 });
@@ -122,27 +121,11 @@ app.notFound((c) => {
   );
 });
 
-// ─── Start Server ───────────────────────────────────────────────────────────
+// ─── Cloudflare Workers Export ──────────────────────────────────────────────
 
-const port = parseInt(process.env.PORT ?? '3001', 10);
-
-console.log(`Mercury API starting on port ${port}...`);
-
-serve(
-  {
-    fetch: app.fetch,
-    port,
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    await handleScheduled(event, env, ctx);
   },
-  (info) => {
-    console.log(`Mercury API running at http://localhost:${info.port}`);
-
-    // Initialize background job scheduler
-    if (process.env.ENABLE_JOBS !== 'false') {
-      initScheduler().catch((err) => {
-        console.error('[scheduler] Failed to initialize job scheduler:', err);
-      });
-    }
-  }
-);
-
-export default app;
+};

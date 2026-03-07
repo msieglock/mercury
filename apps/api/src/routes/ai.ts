@@ -3,7 +3,6 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getServiceClient } from '../lib/supabase.js';
 import { aiGateway, aiGatewayStream } from '../lib/ai-gateway.js';
 import { enrichPerson, enrichOrganization, searchPeople } from '../lib/apollo.js';
 
@@ -48,46 +47,57 @@ ai.post('/compose', async (c) => {
   const { contactId, type, goal, channel } = parsed.data;
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
     // Fetch contact with company
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .select('*, companies(*)')
-      .eq('id', contactId)
-      .eq('user_id', userId)
-      .single();
+    const contact = await db
+      .prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?')
+      .bind(contactId, userId)
+      .first();
 
-    if (contactError || !contact) {
+    if (!contact) {
       return c.json({ error: 'Contact not found' }, 404);
     }
 
+    // Fetch company if linked
+    let company: Record<string, unknown> | null = null;
+    if (contact.company_id) {
+      company = await db
+        .prepare('SELECT * FROM companies WHERE id = ?')
+        .bind(contact.company_id as string)
+        .first();
+    }
+
     // Fetch recent interactions
-    const { data: interactions } = await supabase
-      .from('interactions')
-      .select('*')
-      .eq('contact_id', contactId)
-      .eq('user_id', userId)
-      .order('occurred_at', { ascending: false })
-      .limit(10);
+    const interactionsResult = await db
+      .prepare(
+        'SELECT * FROM interactions WHERE contact_id = ? AND user_id = ? ORDER BY occurred_at DESC LIMIT 10'
+      )
+      .bind(contactId, userId)
+      .all();
+
+    const interactions = interactionsResult.results;
 
     // Fetch user's style fingerprint
-    const { data: user } = await supabase
-      .from('users')
-      .select('style_fingerprint, mode, full_name')
-      .eq('id', userId)
-      .single();
+    const user = await db
+      .prepare('SELECT style_fingerprint, mode, full_name FROM users WHERE id = ?')
+      .bind(userId)
+      .first();
 
-    const styleFingerprint = user?.style_fingerprint;
-    const userMode = user?.mode ?? 'sales';
+    const styleFingerprint = user?.style_fingerprint
+      ? typeof user.style_fingerprint === 'string'
+        ? JSON.parse(user.style_fingerprint as string)
+        : user.style_fingerprint
+      : null;
+    const userMode = (user?.mode as string) ?? 'sales';
 
     // Build the compose prompt
     const interactionHistory = (interactions ?? [])
-      .map((i) => `[${i.type}] ${i.occurred_at}: ${i.subject ?? ''} - ${(i.body ?? '').substring(0, 300)}`)
+      .map((i) => `[${i.type}] ${i.occurred_at}: ${i.subject ?? ''} - ${((i.body as string) ?? '').substring(0, 300)}`)
       .join('\n');
 
-    const companyContext = contact.companies
-      ? `Company: ${contact.companies.name}, Industry: ${contact.companies.industry ?? 'Unknown'}, Size: ${contact.companies.size ?? 'Unknown'}`
+    const companyContext = company
+      ? `Company: ${company.name}, Industry: ${company.industry ?? 'Unknown'}, Size: ${company.size ?? 'Unknown'}`
       : '';
 
     const styleInstructions = styleFingerprint
@@ -139,6 +149,8 @@ Respond with JSON: { "subject": "email subject line or null for SMS", "body": "t
           model: 'sonnet',
           userId,
           agentType: 'composer',
+          db,
+          apiKey: c.env.ANTHROPIC_API_KEY,
           messages: [{ role: 'user', content: userPrompt }],
           system: systemPrompt,
         })) {
@@ -157,6 +169,8 @@ Respond with JSON: { "subject": "email subject line or null for SMS", "body": "t
       model: 'sonnet',
       userId,
       agentType: 'composer',
+      db,
+      apiKey: c.env.ANTHROPIC_API_KEY,
       messages: [{ role: 'user', content: userPrompt }],
       system: systemPrompt,
     });
@@ -200,6 +214,8 @@ ai.post('/classify', async (c) => {
       model: 'haiku',
       userId,
       agentType: 'orchestrator',
+      db: c.env.DB,
+      apiKey: c.env.ANTHROPIC_API_KEY,
       messages: [
         {
           role: 'user',
@@ -254,39 +270,46 @@ ai.post('/research', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
     const researchData: Record<string, unknown> = {};
 
     // Research a specific contact
     if (contactId) {
-      const { data: contact } = await supabase
-        .from('contacts')
-        .select('*, companies(*)')
-        .eq('id', contactId)
-        .eq('user_id', userId)
-        .single();
+      const contact = await db
+        .prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?')
+        .bind(contactId, userId)
+        .first();
 
       if (contact) {
+        // Fetch company if linked
+        let company: Record<string, unknown> | null = null;
+        if (contact.company_id) {
+          company = await db
+            .prepare('SELECT * FROM companies WHERE id = ?')
+            .bind(contact.company_id as string)
+            .first();
+        }
+
         // Enrich via Apollo
-        const enriched = await enrichPerson({
-          email: contact.email ?? undefined,
-          first_name: contact.first_name ?? undefined,
-          last_name: contact.last_name ?? undefined,
-          linkedin_url: contact.linkedin_url ?? undefined,
+        const enriched = await enrichPerson(c.env.APOLLO_API_KEY, {
+          email: (contact.email as string) ?? undefined,
+          first_name: (contact.first_name as string) ?? undefined,
+          last_name: (contact.last_name as string) ?? undefined,
+          linkedin_url: (contact.linkedin_url as string) ?? undefined,
         });
 
-        researchData.contact = contact;
+        researchData.contact = { ...contact, companies: company };
         researchData.enrichment = enriched;
       }
     }
 
     // Research a company by domain
     if (companyDomain) {
-      const orgData = await enrichOrganization({ domain: companyDomain });
+      const orgData = await enrichOrganization(c.env.APOLLO_API_KEY, { domain: companyDomain });
       researchData.company = orgData;
 
       // Find key people at the company
-      const people = await searchPeople({
+      const people = await searchPeople(c.env.APOLLO_API_KEY, {
         q_organization_domains: [companyDomain],
         person_seniorities: ['director', 'vp', 'c_suite', 'owner'],
         per_page: 10,
@@ -299,6 +322,8 @@ ai.post('/research', async (c) => {
       model: 'sonnet',
       userId,
       agentType: 'scout',
+      db,
+      apiKey: c.env.ANTHROPIC_API_KEY,
       messages: [
         {
           role: 'user',
@@ -356,52 +381,65 @@ ai.post('/analyze', async (c) => {
   }
 
   try {
-    const supabase = getServiceClient();
+    const db = c.env.DB;
     const analysisData: Record<string, unknown> = {};
 
     if (pipelineId) {
-      // Fetch pipeline with items and contacts
-      const { data: pipeline } = await supabase
-        .from('pipelines')
-        .select('*')
-        .eq('id', pipelineId)
-        .eq('user_id', userId)
-        .single();
+      // Fetch pipeline
+      const pipeline = await db
+        .prepare('SELECT * FROM pipelines WHERE id = ? AND user_id = ?')
+        .bind(pipelineId, userId)
+        .first();
 
-      const { data: items } = await supabase
-        .from('pipeline_items')
-        .select('*, contacts(*)')
-        .eq('pipeline_id', pipelineId);
+      // Fetch items with contacts
+      const itemsResult = await db
+        .prepare(
+          `SELECT pi.*, c.full_name, c.title as contact_title, c.email as contact_email,
+                  co.name as company_name
+           FROM pipeline_items pi
+           LEFT JOIN contacts c ON pi.contact_id = c.id
+           LEFT JOIN companies co ON c.company_id = co.id
+           WHERE pi.pipeline_id = ?`
+        )
+        .bind(pipelineId)
+        .all();
 
       analysisData.pipeline = pipeline;
-      analysisData.items = items;
+      analysisData.items = itemsResult.results;
     }
 
     if (contactId) {
-      // Fetch contact with interactions
-      const { data: contact } = await supabase
-        .from('contacts')
-        .select('*, companies(*)')
-        .eq('id', contactId)
-        .eq('user_id', userId)
-        .single();
+      // Fetch contact with company
+      const contact = await db
+        .prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?')
+        .bind(contactId, userId)
+        .first();
 
-      const { data: interactions } = await supabase
-        .from('interactions')
-        .select('*')
-        .eq('contact_id', contactId)
-        .eq('user_id', userId)
-        .order('occurred_at', { ascending: false })
-        .limit(20);
+      let company: Record<string, unknown> | null = null;
+      if (contact?.company_id) {
+        company = await db
+          .prepare('SELECT * FROM companies WHERE id = ?')
+          .bind(contact.company_id as string)
+          .first();
+      }
 
-      analysisData.contact = contact;
-      analysisData.interactions = interactions;
+      const interactionsResult = await db
+        .prepare(
+          'SELECT * FROM interactions WHERE contact_id = ? AND user_id = ? ORDER BY occurred_at DESC LIMIT 20'
+        )
+        .bind(contactId, userId)
+        .all();
+
+      analysisData.contact = { ...contact, companies: company };
+      analysisData.interactions = interactionsResult.results;
     }
 
     const response = await aiGateway({
       model: 'sonnet',
       userId,
       agentType: 'analyst',
+      db,
+      apiKey: c.env.ANTHROPIC_API_KEY,
       messages: [
         {
           role: 'user',

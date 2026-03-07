@@ -4,8 +4,7 @@ import { View, ActivityIndicator } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Provider as PaperProvider, MD3LightTheme } from "react-native-paper";
-import { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
 import "../global.css";
 
 const m3Theme = {
@@ -52,24 +51,18 @@ const m3Theme = {
 };
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [session, setSession] = useState<{ token: string } | null | undefined>(
+    undefined
+  );
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    getSession().then((s) => {
       setSession(s);
       setIsLoading(false);
     });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {

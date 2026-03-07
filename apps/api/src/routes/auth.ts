@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { google } from 'googleapis';
-import { getServiceClient } from '../lib/supabase.js';
 import type { AuthEnv } from '../middleware/auth.js';
+import { createSession } from '../middleware/auth.js';
 
 const auth = new Hono<AuthEnv>();
 
@@ -36,9 +36,9 @@ auth.post('/google', async (c) => {
 
   try {
     const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri ?? process.env.GOOGLE_REDIRECT_URI
+      c.env.GOOGLE_CLIENT_ID,
+      c.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri ?? c.env.GOOGLE_REDIRECT_URI
     );
 
     // Exchange the authorization code for tokens
@@ -53,88 +53,112 @@ auth.post('/google', async (c) => {
       return c.json({ error: 'Could not retrieve email from Google' }, 400);
     }
 
-    const supabase = getServiceClient();
+    const db = c.env.DB;
 
-    // Sign in or create user via Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: googleUser.email,
-      email_confirm: true,
-      user_metadata: {
-        full_name: googleUser.name,
-        avatar_url: googleUser.picture,
-      },
-    });
+    // Check if user already exists
+    const existingUser = await db
+      .prepare('SELECT id FROM users WHERE email = ?')
+      .bind(googleUser.email)
+      .first<{ id: string }>();
 
-    // If user already exists, generate a session for them
     let userId: string;
-    let session: unknown;
 
-    if (authError?.message?.includes('already been registered')) {
-      // User exists -- look up their ID and generate a magic link session
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
-      const existing = existingUsers?.users?.find((u) => u.email === googleUser.email);
+    if (existingUser) {
+      userId = existingUser.id;
 
-      if (!existing) {
-        return c.json({ error: 'Failed to find existing user' }, 500);
-      }
-
-      userId = existing.id;
-
-      // Generate a session token
-      const { data: linkData, error: linkError } =
-        await supabase.auth.admin.generateLink({
-          type: 'magiclink',
-          email: googleUser.email,
-        });
-
-      if (linkError) {
-        return c.json({ error: 'Failed to generate session' }, 500);
-      }
-
-      session = linkData;
-    } else if (authError) {
-      return c.json({ error: `Auth error: ${authError.message}` }, 500);
+      // Update user profile
+      await db
+        .prepare(
+          'UPDATE users SET full_name = ?, avatar_url = ?, updated_at = ? WHERE id = ?'
+        )
+        .bind(
+          googleUser.name ?? googleUser.email,
+          googleUser.picture ?? null,
+          new Date().toISOString(),
+          userId
+        )
+        .run();
     } else {
-      userId = authData.user.id;
-      session = authData;
+      // Create new user
+      userId = crypto.randomUUID();
+      await db
+        .prepare(
+          `INSERT INTO users (id, email, full_name, avatar_url, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          userId,
+          googleUser.email,
+          googleUser.name ?? googleUser.email,
+          googleUser.picture ?? null,
+          new Date().toISOString(),
+          new Date().toISOString()
+        )
+        .run();
     }
 
     // Upsert linked_accounts for Google
-    const { error: linkAccountError } = await supabase.from('linked_accounts').upsert(
-      {
-        user_id: userId,
-        provider: 'google',
-        provider_account_id: googleUser.id,
-        access_token: tokens.access_token!,
-        refresh_token: tokens.refresh_token ?? null,
-        token_expires_at: tokens.expiry_date
-          ? new Date(tokens.expiry_date).toISOString()
-          : null,
-        scopes: tokens.scope?.split(' ') ?? [],
-        is_active: true,
-      },
-      { onConflict: 'user_id,provider' }
-    );
+    const existingLink = await db
+      .prepare(
+        'SELECT id FROM linked_accounts WHERE user_id = ? AND provider = ?'
+      )
+      .bind(userId, 'google')
+      .first<{ id: string }>();
 
-    if (linkAccountError) {
-      console.error('[auth/google] Failed to upsert linked account:', linkAccountError);
+    if (existingLink) {
+      await db
+        .prepare(
+          `UPDATE linked_accounts
+           SET provider_account_id = ?, access_token = ?, refresh_token = ?,
+               token_expires_at = ?, scopes = ?, is_active = 1, updated_at = ?
+           WHERE id = ?`
+        )
+        .bind(
+          googleUser.id ?? '',
+          tokens.access_token!,
+          tokens.refresh_token ?? null,
+          tokens.expiry_date
+            ? new Date(tokens.expiry_date).toISOString()
+            : null,
+          JSON.stringify(tokens.scope?.split(' ') ?? []),
+          new Date().toISOString(),
+          existingLink.id
+        )
+        .run();
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO linked_accounts (id, user_id, provider, provider_account_id, access_token, refresh_token, token_expires_at, scopes, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          'google',
+          googleUser.id ?? '',
+          tokens.access_token!,
+          tokens.refresh_token ?? null,
+          tokens.expiry_date
+            ? new Date(tokens.expiry_date).toISOString()
+            : null,
+          JSON.stringify(tokens.scope?.split(' ') ?? []),
+          new Date().toISOString(),
+          new Date().toISOString()
+        )
+        .run();
     }
 
-    // Ensure user profile exists in users table
-    await supabase.from('users').upsert(
-      {
-        id: userId,
-        email: googleUser.email,
-        full_name: googleUser.name ?? googleUser.email,
-        avatar_url: googleUser.picture ?? null,
-      },
-      { onConflict: 'id' }
+    // Create a session token in KV
+    const sessionToken = await createSession(
+      c.env.SESSIONS,
+      userId,
+      googleUser.email
     );
 
     return c.json({
       success: true,
       user_id: userId,
-      session,
+      token: sessionToken,
     });
   } catch (error) {
     console.error('[auth/google] OAuth callback failed:', error);
@@ -153,12 +177,6 @@ auth.post('/microsoft', async (c) => {
   }
 
   // TODO: Implement Microsoft OAuth callback
-  // 1. Exchange code for tokens via Microsoft Graph
-  // 2. Get user info from Microsoft
-  // 3. Create/update user in Supabase
-  // 4. Store linked_account
-  // 5. Return session
-
   return c.json(
     { error: 'Microsoft OAuth not yet implemented' },
     501
@@ -185,6 +203,8 @@ auth.post('/linkedin/import', async (c) => {
   const { csv_data } = parsed.data;
 
   try {
+    const db = c.env.DB;
+
     // Parse CSV data -- LinkedIn exports have headers like:
     // First Name,Last Name,Email Address,Company,Position,Connected On
     const lines = csv_data.split('\n').filter((line) => line.trim());
@@ -228,8 +248,6 @@ auth.post('/linkedin/import', async (c) => {
       });
     }
 
-    // Upsert contacts into the database
-    const supabase = getServiceClient();
     let importedCount = 0;
 
     for (const contact of contacts) {
@@ -237,52 +255,61 @@ auth.post('/linkedin/import', async (c) => {
       let existingContactId: string | null = null;
 
       if (contact.email) {
-        const { data: byEmail } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('email', contact.email)
-          .maybeSingle();
+        const byEmail = await db
+          .prepare('SELECT id FROM contacts WHERE user_id = ? AND email = ?')
+          .bind(userId, contact.email)
+          .first<{ id: string }>();
         existingContactId = byEmail?.id ?? null;
       }
 
       if (!existingContactId && contact.linkedin_url) {
-        const { data: byLinkedIn } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('linkedin_url', contact.linkedin_url)
-          .maybeSingle();
+        const byLinkedIn = await db
+          .prepare('SELECT id FROM contacts WHERE user_id = ? AND linkedin_url = ?')
+          .bind(userId, contact.linkedin_url)
+          .first<{ id: string }>();
         existingContactId = byLinkedIn?.id ?? null;
       }
 
       if (existingContactId) {
-        // Merge: update with LinkedIn data if fields are empty
-        await supabase
-          .from('contacts')
-          .update({
-            linkedin_url: contact.linkedin_url,
-            title: contact.title,
-            first_name: contact.first_name,
-            last_name: contact.last_name,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingContactId);
+        // Merge: update with LinkedIn data
+        await db
+          .prepare(
+            `UPDATE contacts SET linkedin_url = ?, title = ?, first_name = ?, last_name = ?, updated_at = ?
+             WHERE id = ?`
+          )
+          .bind(
+            contact.linkedin_url,
+            contact.title,
+            contact.first_name,
+            contact.last_name,
+            new Date().toISOString(),
+            existingContactId
+          )
+          .run();
       } else {
         // Insert new contact
-        await supabase.from('contacts').insert({
-          user_id: userId,
-          full_name: contact.full_name,
-          first_name: contact.first_name,
-          last_name: contact.last_name,
-          email: contact.email,
-          title: contact.title,
-          linkedin_url: contact.linkedin_url,
-          segment: 'connected',
-          outreach_path: 'direct_linkedin',
-          relationship_score: 50,
-          tags: ['linkedin_import'],
-        });
+        await db
+          .prepare(
+            `INSERT INTO contacts (id, user_id, full_name, first_name, last_name, email, title, linkedin_url, segment, outreach_path, relationship_score, tags, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            crypto.randomUUID(),
+            userId,
+            contact.full_name,
+            contact.first_name,
+            contact.last_name,
+            contact.email,
+            contact.title,
+            contact.linkedin_url,
+            'connected',
+            'direct_linkedin',
+            50,
+            JSON.stringify(['linkedin_import']),
+            new Date().toISOString(),
+            new Date().toISOString()
+          )
+          .run();
       }
 
       importedCount++;
