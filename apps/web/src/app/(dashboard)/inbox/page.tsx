@@ -13,7 +13,7 @@ import {
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { ThreadView } from '@/components/thread-view';
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const filterTabs = [
   { label: 'All', value: 'all', count: 12 },
@@ -108,9 +108,9 @@ const intentBadgeColors: Record<string, string> = {
   interested: 'bg-emerald-50 text-emerald-700',
   question: 'bg-blue-50 text-blue-700',
   objection: 'bg-amber-50 text-amber-700',
-  not_now: 'bg-warm-gray-100 text-warm-gray-600',
+  not_now: 'bg-surface-containerHigh text-onSurface-variant',
   referral: 'bg-purple-50 text-purple-700',
-  ooo: 'bg-warm-gray-100 text-warm-gray-500',
+  ooo: 'bg-surface-containerHigh text-onSurface-variant',
 };
 
 const mockMessages = [
@@ -139,7 +139,7 @@ const mockAIDraft = {
   confidence: 0.91,
 };
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function InboxPage() {
   const [activeFilter, setActiveFilter] = useState('all');
@@ -153,20 +153,20 @@ export default function InboxPage() {
 
   return (
     <div className="max-w-7xl mx-auto -mt-2">
-      <div className="grid grid-cols-[380px_1fr] gap-0 bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden h-[calc(100vh-10rem)]">
+      <div className="grid grid-cols-[380px_1fr] gap-0 bg-surface rounded-xl border border-outline-variant overflow-hidden h-[calc(100vh-10rem)]">
         {/* LEFT PANE - Thread List */}
-        <div className="border-r border-warm-gray-200 flex flex-col">
+        <div className="border-r border-outline-variant flex flex-col">
           {/* Filter Tabs */}
-          <div className="px-4 py-3 border-b border-warm-gray-100 flex items-center gap-1 overflow-x-auto scrollbar-none">
+          <div className="px-4 py-3 border-b border-outline-variant flex items-center gap-1 overflow-x-auto scrollbar-none">
             {filterTabs.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => setActiveFilter(tab.value)}
                 className={cn(
-                  'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-mercury',
+                  'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-m3',
                   activeFilter === tab.value
-                    ? 'bg-charcoal text-cream'
-                    : 'text-warm-gray-500 hover:text-charcoal hover:bg-warm-gray-100',
+                    ? 'bg-secondary-container text-onSecondary-container'
+                    : 'text-onSurface-variant hover:text-onSurface hover:bg-surface-containerHigh',
                 )}
               >
                 {tab.label}
@@ -176,16 +176,16 @@ export default function InboxPage() {
           </div>
 
           {/* Thread List */}
-          <div className="flex-1 overflow-y-auto scrollbar-mercury">
+          <div className="flex-1 overflow-y-auto scrollbar-m3">
             {filteredThreads.map((thread) => (
               <button
                 key={thread.id}
                 onClick={() => setSelectedThread(thread)}
                 className={cn(
-                  'w-full text-left px-4 py-3.5 border-b border-warm-gray-100 transition-mercury',
+                  'w-full text-left px-4 py-3.5 border-b border-outline-variant transition-m3',
                   selectedThread?.id === thread.id
-                    ? 'bg-warm-gray-50'
-                    : 'hover:bg-warm-gray-50',
+                    ? 'bg-secondary-container/30'
+                    : 'hover:bg-surface-containerLow',
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -194,7 +194,7 @@ export default function InboxPage() {
                     <div
                       className={cn(
                         'w-2 h-2 rounded-full',
-                        thread.unread ? 'bg-sienna' : 'bg-transparent',
+                        thread.unread ? 'bg-primary' : 'bg-transparent',
                       )}
                     />
                   </div>
@@ -205,13 +205,13 @@ export default function InboxPage() {
                         className={cn(
                           'text-sm truncate',
                           thread.unread
-                            ? 'font-semibold text-charcoal'
-                            : 'font-medium text-warm-gray-700',
+                            ? 'font-medium text-onSurface'
+                            : 'font-normal text-onSurface-variant',
                         )}
                       >
                         {thread.contactName}
                       </span>
-                      <span className="text-xs text-warm-gray-400 flex-shrink-0">
+                      <span className="text-xs text-onSurface-variant flex-shrink-0">
                         {formatRelativeTime(thread.timestamp)}
                       </span>
                     </div>
@@ -219,13 +219,13 @@ export default function InboxPage() {
                       className={cn(
                         'text-sm truncate mt-0.5',
                         thread.unread
-                          ? 'text-charcoal'
-                          : 'text-warm-gray-600',
+                          ? 'text-onSurface'
+                          : 'text-onSurface-variant',
                       )}
                     >
                       {thread.subject}
                     </p>
-                    <p className="text-xs text-warm-gray-400 truncate mt-0.5">
+                    <p className="text-xs text-onSurface-variant truncate mt-0.5">
                       {thread.preview}
                     </p>
 
@@ -236,14 +236,14 @@ export default function InboxPage() {
                           className={cn(
                             'text-[10px] font-medium px-1.5 py-0.5 rounded capitalize',
                             intentBadgeColors[thread.intent] ||
-                              'bg-warm-gray-100 text-warm-gray-500',
+                              'bg-surface-containerHigh text-onSurface-variant',
                           )}
                         >
                           {thread.intent.replace('_', ' ')}
                         </span>
                       )}
                       {thread.hasAIDraft && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sienna-50 text-sienna">
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-tertiary-container text-onTertiary-container">
                           <Sparkles className="w-2.5 h-2.5" />
                           AI Draft
                         </span>
@@ -268,8 +268,8 @@ export default function InboxPage() {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <Mail className="w-10 h-10 text-warm-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-warm-gray-500">
+                <Mail className="w-10 h-10 text-outline mx-auto mb-3" />
+                <p className="text-sm text-onSurface-variant">
                   Select a conversation to view
                 </p>
               </div>

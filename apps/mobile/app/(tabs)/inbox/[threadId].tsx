@@ -108,20 +108,20 @@ export default function ThreadDetailScreen() {
   const aiDraft = messages.find((m) => m.isAiDraft);
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       {/* Header */}
-      <View className="flex-row items-center px-5 py-3 border-b border-warm-100 bg-cream">
+      <View className="flex-row items-center px-5 py-3 border-b border-outlineVariant bg-background">
         <Pressable
           onPress={() => router.back()}
           className="mr-4 active:opacity-60"
         >
-          <ArrowLeft size={24} color="#1A1815" />
+          <ArrowLeft size={24} color="#1B1B1F" />
         </Pressable>
         <View className="flex-1">
-          <Text className="text-charcoal text-base font-semibold">
+          <Text className="text-onSurface text-base font-semibold">
             Sarah Chen
           </Text>
-          <Text className="text-warm-500 text-xs">Re: Pricing Proposal</Text>
+          <Text className="text-onSurfaceVariant text-xs">Re: Pricing Proposal</Text>
         </View>
       </View>
 
@@ -149,51 +149,51 @@ export default function ThreadDetailScreen() {
 
         {/* AI Draft actions */}
         {aiDraft && (
-          <View className="flex-row items-center justify-center gap-3 px-4 py-2 bg-sienna-50 border-t border-sienna-100">
+          <View className="flex-row items-center justify-center gap-3 px-4 py-2 bg-tertiaryContainer border-t border-outlineVariant">
             <Pressable
               onPress={handleSendDraft}
-              className="bg-sienna px-5 py-2 rounded-full flex-row items-center gap-1.5 active:opacity-80"
+              className="bg-primary px-5 py-2 rounded-full flex-row items-center gap-1.5 active:opacity-80"
             >
               <Send size={14} color="white" />
-              <Text className="text-white text-sm font-semibold">Send</Text>
+              <Text className="text-onPrimary text-sm font-semibold">Send</Text>
             </Pressable>
             <Pressable
               onPress={handleEditDraft}
-              className="bg-white px-4 py-2 rounded-full flex-row items-center gap-1.5 border border-warm-200 active:opacity-80"
+              className="bg-surface px-4 py-2 rounded-full flex-row items-center gap-1.5 border border-outlineVariant active:opacity-80"
             >
-              <Pencil size={14} color="#1A1815" />
-              <Text className="text-charcoal text-sm font-medium">Edit</Text>
+              <Pencil size={14} color="#1B1B1F" />
+              <Text className="text-onSurface text-sm font-medium">Edit</Text>
             </Pressable>
             <Pressable
               onPress={handleRegenerateDraft}
-              className="bg-white px-4 py-2 rounded-full flex-row items-center gap-1.5 border border-warm-200 active:opacity-80"
+              className="bg-surface px-4 py-2 rounded-full flex-row items-center gap-1.5 border border-outlineVariant active:opacity-80"
             >
-              <RefreshCw size={14} color="#1A1815" />
-              <Text className="text-charcoal text-sm font-medium">Redo</Text>
+              <RefreshCw size={14} color="#1B1B1F" />
+              <Text className="text-onSurface text-sm font-medium">Redo</Text>
             </Pressable>
           </View>
         )}
 
         {/* Compose input */}
-        <View className="flex-row items-end px-4 py-3 bg-white border-t border-warm-100">
+        <View className="flex-row items-end px-4 py-3 bg-surface border-t border-outlineVariant">
           <TextInput
             value={composeText}
             onChangeText={setComposeText}
             placeholder="Type a message..."
-            placeholderTextColor="#B8B3A7"
+            placeholderTextColor="#767680"
             multiline
-            className="flex-1 bg-warm-50 rounded-2xl px-4 py-2.5 text-charcoal text-[15px] max-h-24 mr-2"
+            className="flex-1 bg-surfaceContainerLow rounded-2xl px-4 py-2.5 text-onSurface text-[15px] max-h-24 mr-2"
           />
           <Pressable
             onPress={handleSend}
             disabled={!composeText.trim()}
             className={`w-10 h-10 rounded-full items-center justify-center ${
-              composeText.trim() ? "bg-sienna active:opacity-80" : "bg-warm-200"
+              composeText.trim() ? "bg-primary active:opacity-80" : "bg-surfaceContainerHigh"
             }`}
           >
             <Send
               size={18}
-              color={composeText.trim() ? "white" : "#B8B3A7"}
+              color={composeText.trim() ? "white" : "#767680"}
             />
           </Pressable>
         </View>

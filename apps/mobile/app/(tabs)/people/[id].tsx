@@ -33,10 +33,10 @@ function ActionButton({
       }}
       className="items-center gap-1.5 active:opacity-60"
     >
-      <View className="w-11 h-11 bg-white border border-warm-200 rounded-full items-center justify-center">
+      <View className="w-11 h-11 bg-secondaryContainer rounded-full items-center justify-center">
         {icon}
       </View>
-      <Text className="text-warm-600 text-[10px] font-medium">{label}</Text>
+      <Text className="text-onSurfaceVariant text-[10px] font-medium">{label}</Text>
     </Pressable>
   );
 }
@@ -49,8 +49,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
-      <Text className="text-warm-600 text-xs font-semibold uppercase tracking-wider mb-3">
+    <View className="bg-surface rounded-2xl p-4 mb-4 shadow-sm">
+      <Text className="text-onSurfaceVariant text-xs font-semibold uppercase tracking-wider mb-3">
         {title}
       </Text>
       {children}
@@ -74,16 +74,16 @@ export default function ContactDetailScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       {/* Header */}
       <View className="flex-row items-center px-5 py-3">
         <Pressable
           onPress={() => router.back()}
           className="mr-4 active:opacity-60"
         >
-          <ArrowLeft size={24} color="#1A1815" />
+          <ArrowLeft size={24} color="#1B1B1F" />
         </Pressable>
-        <Text className="text-charcoal text-lg font-semibold flex-1">
+        <Text className="text-onSurface text-lg font-semibold flex-1">
           Contact
         </Text>
       </View>
@@ -95,25 +95,25 @@ export default function ContactDetailScreen() {
         {/* Profile header */}
         <View className="items-center px-5 py-6">
           <Avatar name={contact.name} size="xl" />
-          <Text className="text-charcoal text-xl font-semibold mt-3">
+          <Text className="text-onSurface text-xl font-semibold mt-3">
             {contact.name}
           </Text>
-          <Text className="text-warm-500 text-sm mt-0.5">
+          <Text className="text-onSurfaceVariant text-sm mt-0.5">
             {contact.title} at {contact.company}
           </Text>
           <View className="mt-3">
-            <Badge label="Via Email" variant="sienna" size="md" />
+            <Badge label="Via Email" variant="primary" size="md" />
           </View>
         </View>
 
         {/* Action buttons */}
         <View className="flex-row justify-center gap-6 pb-6">
           <ActionButton
-            icon={<Mail size={18} color="#1A1815" />}
+            icon={<Mail size={18} color="#1B1B1F" />}
             label="Email"
           />
           <ActionButton
-            icon={<MessageSquare size={18} color="#1A1815" />}
+            icon={<MessageSquare size={18} color="#1B1B1F" />}
             label="Text"
           />
           <ActionButton
@@ -121,11 +121,11 @@ export default function ContactDetailScreen() {
             label="LinkedIn"
           />
           <ActionButton
-            icon={<Calendar size={18} color="#1A1815" />}
+            icon={<Calendar size={18} color="#1B1B1F" />}
             label="Schedule"
           />
           <ActionButton
-            icon={<Pencil size={18} color="#1A1815" />}
+            icon={<Pencil size={18} color="#1B1B1F" />}
             label="Note"
           />
         </View>
@@ -133,29 +133,29 @@ export default function ContactDetailScreen() {
         <View className="px-5">
           {/* AI Insights */}
           <SectionCard title="AI Insights">
-            <View className="bg-sienna-50 rounded-xl p-3 mb-2">
+            <View className="bg-primaryContainer rounded-xl p-3 mb-2">
               <View className="flex-row items-center gap-1.5 mb-1">
-                <Sparkles size={12} color="#D4552A" />
-                <Text className="text-sienna text-xs font-semibold">
+                <Sparkles size={12} color="#1A237E" />
+                <Text className="text-primary text-xs font-semibold">
                   Recommendation
                 </Text>
               </View>
-              <Text className="text-charcoal text-sm leading-5">
+              <Text className="text-onPrimaryContainer text-sm leading-5">
                 Sarah showed high interest in your pricing proposal 3 weeks ago
                 but hasn't responded. Consider following up with a case study
                 from a similar company.
               </Text>
             </View>
             <View className="flex-row items-center justify-between">
-              <Text className="text-warm-500 text-xs">Relationship Score</Text>
+              <Text className="text-onSurfaceVariant text-xs">Relationship Score</Text>
               <View className="flex-row items-center gap-2">
-                <View className="w-20 h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                <View className="w-20 h-1.5 bg-surfaceContainerHigh rounded-full overflow-hidden">
                   <View
-                    className="h-full bg-green-500 rounded-full"
+                    className="h-full bg-primary rounded-full"
                     style={{ width: `${contact.relationshipScore}%` }}
                   />
                 </View>
-                <Text className="text-warm-600 text-xs font-semibold">
+                <Text className="text-onSurfaceVariant text-xs font-semibold">
                   {contact.relationshipScore}
                 </Text>
               </View>
@@ -173,13 +173,13 @@ export default function ContactDetailScreen() {
               <View
                 key={index}
                 className={`flex-row gap-3 py-2.5 ${
-                  index > 0 ? "border-t border-warm-50" : ""
+                  index > 0 ? "border-t border-outlineVariant" : ""
                 }`}
               >
-                <View className="w-2 h-2 bg-warm-300 rounded-full mt-1.5" />
+                <View className="w-2 h-2 bg-outline rounded-full mt-1.5" />
                 <View className="flex-1">
-                  <Text className="text-charcoal text-sm">{item.event}</Text>
-                  <Text className="text-warm-400 text-xs mt-0.5">
+                  <Text className="text-onSurface text-sm">{item.event}</Text>
+                  <Text className="text-outline text-xs mt-0.5">
                     {item.time}
                   </Text>
                 </View>
@@ -198,16 +198,16 @@ export default function ContactDetailScreen() {
                 { label: "Location", value: "San Francisco, CA" },
               ].map((item) => (
                 <View key={item.label} className="flex-row justify-between">
-                  <Text className="text-warm-500 text-sm">{item.label}</Text>
-                  <Text className="text-charcoal text-sm font-medium">
+                  <Text className="text-onSurfaceVariant text-sm">{item.label}</Text>
+                  <Text className="text-onSurface text-sm font-medium">
                     {item.value}
                   </Text>
                 </View>
               ))}
             </View>
-            <Pressable className="flex-row items-center gap-1.5 mt-3 pt-3 border-t border-warm-100 active:opacity-60">
-              <ExternalLink size={14} color="#D4552A" />
-              <Text className="text-sienna text-sm font-medium">
+            <Pressable className="flex-row items-center gap-1.5 mt-3 pt-3 border-t border-outlineVariant active:opacity-60">
+              <ExternalLink size={14} color="#1A237E" />
+              <Text className="text-primary text-sm font-medium">
                 View full profile on Apollo
               </Text>
             </Pressable>
@@ -215,8 +215,8 @@ export default function ContactDetailScreen() {
 
           {/* Relationship Graph Placeholder */}
           <SectionCard title="Relationship Map">
-            <View className="h-32 bg-warm-50 rounded-xl items-center justify-center">
-              <Text className="text-warm-400 text-sm">
+            <View className="h-32 bg-surfaceContainerLow rounded-xl items-center justify-center">
+              <Text className="text-outline text-sm">
                 Network graph coming soon
               </Text>
             </View>

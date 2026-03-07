@@ -35,37 +35,24 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function getColorFromName(name: string): string {
-  const colors = [
-    "bg-sienna-200",
-    "bg-warm-200",
-    "bg-sienna-100",
-    "bg-warm-300",
-    "bg-sienna-300",
-  ];
-  const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
-}
-
 export function Avatar({ name, size = "md", online }: AvatarProps) {
   const initials = getInitials(name);
-  const bgColor = getColorFromName(name);
 
   return (
     <View className="relative">
       <View
-        className={`${sizeClasses[size]} ${bgColor} rounded-full items-center justify-center`}
+        className={`${sizeClasses[size]} bg-primaryContainer rounded-full items-center justify-center`}
       >
         <Text
-          className={`${textSizeClasses[size]} font-semibold text-charcoal`}
+          className={`${textSizeClasses[size]} font-semibold text-onPrimaryContainer`}
         >
           {initials}
         </Text>
       </View>
       {online !== undefined && (
         <View
-          className={`absolute bottom-0 right-0 ${onlineDotSizeClasses[size]} rounded-full border-2 border-cream ${
-            online ? "bg-green-500" : "bg-warm-400"
+          className={`absolute bottom-0 right-0 ${onlineDotSizeClasses[size]} rounded-full border-2 border-background ${
+            online ? "bg-green-500" : "bg-outline"
           }`}
         />
       )}

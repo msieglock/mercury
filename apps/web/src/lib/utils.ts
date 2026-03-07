@@ -42,15 +42,15 @@ export function getInitials(name: string): string {
 export function priorityColor(priority: string): string {
   switch (priority) {
     case 'urgent':
-      return 'text-red-600 bg-red-50';
+      return 'text-error bg-error-container';
     case 'high':
-      return 'text-sienna bg-sienna-50';
+      return 'text-primary bg-primary-container';
     case 'medium':
       return 'text-amber-600 bg-amber-50';
     case 'low':
-      return 'text-warm-gray-500 bg-warm-gray-100';
+      return 'text-onSurface-variant bg-surface-containerHigh';
     default:
-      return 'text-warm-gray-500 bg-warm-gray-100';
+      return 'text-onSurface-variant bg-surface-containerHigh';
   }
 }
 

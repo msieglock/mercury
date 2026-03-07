@@ -24,7 +24,7 @@ interface Thread {
   timestamp: string;
   unread: boolean;
   intentBadge?: string;
-  intentVariant?: "sienna" | "success" | "warning" | "info" | "muted";
+  intentVariant?: "primary" | "success" | "warning" | "info" | "muted";
   hasAiDraft?: boolean;
 }
 
@@ -58,7 +58,7 @@ const mockThreads: Thread[] = [
     timestamp: "1d ago",
     unread: false,
     intentBadge: "Warm Intro",
-    intentVariant: "sienna",
+    intentVariant: "primary",
   },
   {
     id: "t4",
@@ -106,14 +106,14 @@ function ThreadRow({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
       }}
-      className={`flex-row px-5 py-4 active:bg-warm-50 ${
-        thread.unread ? "bg-white" : "bg-cream"
+      className={`flex-row px-5 py-4 active:bg-surfaceContainerLow ${
+        thread.unread ? "bg-surface" : "bg-background"
       }`}
     >
       <View className="relative">
         <Avatar name={thread.senderName} size="md" />
         {thread.unread && (
-          <View className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-sienna rounded-full border-2 border-cream" />
+          <View className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary rounded-full border-2 border-background" />
         )}
       </View>
 
@@ -122,28 +122,28 @@ function ThreadRow({
           <Text
             className={`text-[15px] flex-1 mr-2 ${
               thread.unread
-                ? "text-charcoal font-semibold"
-                : "text-warm-700 font-medium"
+                ? "text-onSurface font-semibold"
+                : "text-onSurfaceVariant font-medium"
             }`}
             numberOfLines={1}
           >
             {thread.senderName}
           </Text>
-          <Text className="text-warm-400 text-[11px]">{thread.timestamp}</Text>
+          <Text className="text-outline text-[11px]">{thread.timestamp}</Text>
         </View>
 
         <Text
           className={`text-[13px] mb-1 ${
             thread.unread
-              ? "text-charcoal font-medium"
-              : "text-warm-600"
+              ? "text-onSurface font-medium"
+              : "text-onSurfaceVariant"
           }`}
           numberOfLines={1}
         >
           {thread.subject}
         </Text>
 
-        <Text className="text-warm-500 text-[13px]" numberOfLines={1}>
+        <Text className="text-onSurfaceVariant text-[13px]" numberOfLines={1}>
           {thread.preview}
         </Text>
 
@@ -156,7 +156,7 @@ function ThreadRow({
             />
           )}
           {thread.hasAiDraft && (
-            <Badge label="AI Draft Ready" variant="sienna" size="sm" />
+            <Badge label="AI Draft Ready" variant="primary" size="sm" />
           )}
         </View>
       </View>
@@ -175,10 +175,10 @@ export default function InboxScreen() {
   }, []);
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       {/* Header */}
       <View className="px-5 pt-4 pb-2">
-        <Text className="text-charcoal text-3xl font-serif font-bold">
+        <Text className="text-onBackground text-3xl font-bold">
           Inbox
         </Text>
       </View>
@@ -201,7 +201,7 @@ export default function InboxScreen() {
           />
         )}
         ItemSeparatorComponent={() => (
-          <View className="h-px bg-warm-100 ml-16" />
+          <View className="h-px bg-outlineVariant ml-16" />
         )}
         ListEmptyComponent={
           <EmptyState
@@ -213,7 +213,7 @@ export default function InboxScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#D4552A"
+            tintColor="#1A237E"
           />
         }
         contentContainerStyle={{ paddingBottom: 24 }}

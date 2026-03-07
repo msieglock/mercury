@@ -22,21 +22,21 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 rounded-2xl border border-[#E5E2DE] bg-[#FAFAF8] p-5 shadow-sm',
+        'flex flex-col gap-3 rounded-xl border border-outline-variant bg-surface-containerLow p-5 shadow-elevation-1',
         className,
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0EEEB] text-[#6B6560]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-container text-onSurface-variant">
           {icon}
         </span>
         {trend && (
           <span
             className={cn(
               'flex items-center gap-0.5 text-xs font-medium',
-              trend.direction === 'up' && 'text-emerald-600',
-              trend.direction === 'down' && 'text-red-500',
-              trend.direction === 'flat' && 'text-[#6B6560]',
+              trend.direction === 'up' && 'text-primary',
+              trend.direction === 'down' && 'text-error',
+              trend.direction === 'flat' && 'text-onSurface-variant',
             )}
           >
             {trend.direction === 'up' && '\u2191'}
@@ -47,8 +47,8 @@ export function StatCard({
         )}
       </div>
       <div>
-        <p className="text-2xl font-semibold text-[#1A1815]">{value}</p>
-        <p className="mt-0.5 text-sm text-[#6B6560]">{label}</p>
+        <p className="text-2xl font-semibold text-primary">{value}</p>
+        <p className="mt-0.5 text-sm text-onSurface-variant">{label}</p>
       </div>
     </div>
   );

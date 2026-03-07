@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn, getInitials, formatRelativeTime, segmentLabel } from '@/lib/utils';
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const contact = {
   id: '1',
@@ -53,7 +53,7 @@ const interactions = [
     id: '2',
     type: 'email_sent' as const,
     subject: 'Re: Mercury deck - Series A',
-    body: 'Hi Sarah, great to connect at Disrupt! As promised, here is our updated deck with Q4 metrics. Happy to discuss anytime.',
+    body: "Hi Sarah, great to connect at Disrupt! As promised, here is our updated deck with Q4 metrics. Happy to discuss anytime.",
     timestamp: new Date(Date.now() - 172800000).toISOString(),
     sentiment: 'neutral' as const,
   },
@@ -124,7 +124,7 @@ const typeLabels: Record<string, string> = {
   call: 'Call',
 };
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function ContactDetailPage() {
   return (
@@ -132,18 +132,18 @@ export default function ContactDetailPage() {
       {/* Back Link */}
       <Link
         href="/people"
-        className="inline-flex items-center gap-1.5 text-sm text-warm-gray-500 hover:text-charcoal transition-mercury mb-6"
+        className="inline-flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3 mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to People
       </Link>
 
       {/* Profile Header */}
-      <div className="bg-white rounded-mercury-lg border border-warm-gray-200 p-6 mb-6">
+      <div className="bg-surface rounded-xl border border-outline-variant p-6 mb-6">
         <div className="flex items-start gap-5">
           {/* Avatar */}
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sienna-300 to-sienna flex items-center justify-center flex-shrink-0">
-            <span className="text-xl font-semibold text-white">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center flex-shrink-0">
+            <span className="text-xl font-semibold text-onPrimary">
               {getInitials(contact.fullName)}
             </span>
           </div>
@@ -152,10 +152,10 @@ export default function ContactDetailPage() {
           <div className="flex-1">
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-2xl font-serif font-semibold text-charcoal">
+                <h1 className="text-2xl font-medium text-onSurface">
                   {contact.fullName}
                 </h1>
-                <p className="text-warm-gray-600 mt-0.5">
+                <p className="text-onSurface-variant mt-0.5">
                   {contact.title} at{' '}
                   <span className="font-medium">{contact.company}</span>
                 </p>
@@ -164,7 +164,7 @@ export default function ContactDetailPage() {
                 <span
                   className={cn(
                     'px-3 py-1 text-xs font-medium rounded-full',
-                    'bg-sienna-50 text-sienna',
+                    'bg-primary-container text-onPrimary-container',
                   )}
                 >
                   {segmentLabel(contact.segment)}
@@ -179,38 +179,38 @@ export default function ContactDetailPage() {
             <div className="flex items-center gap-6 mt-4">
               <a
                 href={`mailto:${contact.email}`}
-                className="flex items-center gap-1.5 text-sm text-warm-gray-600 hover:text-charcoal transition-mercury"
+                className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
               >
-                <Mail className="w-3.5 h-3.5 text-warm-gray-400" />
+                <Mail className="w-3.5 h-3.5 text-onSurface-variant" />
                 {contact.email}
               </a>
-              <span className="flex items-center gap-1.5 text-sm text-warm-gray-600">
-                <Phone className="w-3.5 h-3.5 text-warm-gray-400" />
+              <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
+                <Phone className="w-3.5 h-3.5 text-onSurface-variant" />
                 {contact.phone}
               </span>
               <a
                 href={contact.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-warm-gray-600 hover:text-charcoal transition-mercury"
+                className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
               >
-                <Linkedin className="w-3.5 h-3.5 text-warm-gray-400" />
+                <Linkedin className="w-3.5 h-3.5 text-onSurface-variant" />
                 LinkedIn
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <span className="flex items-center gap-1.5 text-sm text-warm-gray-600">
-                <MapPin className="w-3.5 h-3.5 text-warm-gray-400" />
+              <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
+                <MapPin className="w-3.5 h-3.5 text-onSurface-variant" />
                 {contact.location}
               </span>
             </div>
 
             {/* Outreach Path Badge */}
-            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-warm-gray-50 rounded-mercury text-xs">
-              <UserPlus className="w-3.5 h-3.5 text-sienna" />
-              <span className="font-medium text-charcoal">
+            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-surface-containerLow rounded-md text-xs">
+              <UserPlus className="w-3.5 h-3.5 text-primary" />
+              <span className="font-medium text-onSurface">
                 Outreach Path: Warm Intro
               </span>
-              <span className="text-warm-gray-500">
+              <span className="text-onSurface-variant">
                 via David Park (mutual connection)
               </span>
             </div>
@@ -220,7 +220,7 @@ export default function ContactDetailPage() {
               {contact.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2.5 py-1 text-xs font-medium text-warm-gray-600 bg-warm-gray-100 rounded-full"
+                  className="px-2.5 py-1 text-xs font-medium text-onSecondary-container bg-secondary-container rounded-lg"
                 >
                   {tag}
                 </span>
@@ -233,16 +233,16 @@ export default function ContactDetailPage() {
       {/* Two Column Layout */}
       <div className="grid grid-cols-[1fr_380px] gap-6">
         {/* LEFT - Interaction Timeline */}
-        <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-warm-gray-100">
-            <h2 className="text-sm font-semibold text-charcoal">
+        <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+          <div className="px-5 py-4 border-b border-outline-variant">
+            <h2 className="text-sm font-medium text-onSurface">
               Interaction Timeline
             </h2>
           </div>
           <div className="p-5">
             <div className="relative">
               {/* Timeline line */}
-              <div className="absolute left-[15px] top-6 bottom-6 w-[1px] bg-warm-gray-200" />
+              <div className="absolute left-[15px] top-6 bottom-6 w-[1px] bg-outline-variant" />
 
               <div className="space-y-6">
                 {interactions.map((interaction) => {
@@ -259,16 +259,16 @@ export default function ContactDetailPage() {
                         className={cn(
                           'w-[31px] h-[31px] rounded-full flex items-center justify-center flex-shrink-0 z-10',
                           isInbound
-                            ? 'bg-sienna-50 border-2 border-sienna-200'
-                            : 'bg-warm-gray-100 border-2 border-warm-gray-200',
+                            ? 'bg-primary-container border-2 border-primary/30'
+                            : 'bg-surface-containerHigh border-2 border-outline-variant',
                         )}
                       >
                         <Icon
                           className={cn(
                             'w-3.5 h-3.5',
                             isInbound
-                              ? 'text-sienna'
-                              : 'text-warm-gray-500',
+                              ? 'text-primary'
+                              : 'text-onSurface-variant',
                           )}
                         />
                       </div>
@@ -276,10 +276,10 @@ export default function ContactDetailPage() {
                       {/* Content */}
                       <div className="flex-1 pb-2">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-warm-gray-500">
+                          <span className="text-xs font-medium text-onSurface-variant">
                             {typeLabels[interaction.type]}
                           </span>
-                          <span className="text-xs text-warm-gray-400">
+                          <span className="text-xs text-onSurface-variant">
                             {formatRelativeTime(interaction.timestamp)}
                           </span>
                           {interaction.sentiment === 'positive' && (
@@ -289,11 +289,11 @@ export default function ContactDetailPage() {
                           )}
                         </div>
                         {interaction.subject && (
-                          <p className="text-sm font-medium text-charcoal">
+                          <p className="text-sm font-medium text-onSurface">
                             {interaction.subject}
                           </p>
                         )}
-                        <p className="text-sm text-warm-gray-600 mt-1 leading-relaxed">
+                        <p className="text-sm text-onSurface-variant mt-1 leading-relaxed">
                           {interaction.body}
                         </p>
                       </div>
@@ -308,20 +308,20 @@ export default function ContactDetailPage() {
         {/* RIGHT - AI Insights + Enrichment */}
         <div className="space-y-6">
           {/* AI Insights */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-sienna" />
-              <h2 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-medium text-onSurface">
                 AI Insights
               </h2>
             </div>
-            <div className="divide-y divide-warm-gray-100">
+            <div className="divide-y divide-outline-variant">
               {insights.map((insight) => (
                 <div key={insight.label} className="px-5 py-3">
-                  <p className="text-xs font-medium text-warm-gray-500 uppercase tracking-wider">
+                  <p className="text-xs font-medium text-onSurface-variant uppercase tracking-wider">
                     {insight.label}
                   </p>
-                  <p className="text-sm text-charcoal mt-0.5 font-medium">
+                  <p className="text-sm text-onSurface mt-0.5 font-medium">
                     {insight.value}
                   </p>
                 </div>
@@ -330,22 +330,22 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Relationship Graph Placeholder */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-warm-gray-400" />
-              <h2 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-onSurface-variant" />
+              <h2 className="text-sm font-medium text-onSurface">
                 Relationship Graph
               </h2>
             </div>
             <div className="px-5 py-8 flex items-center justify-center">
               <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-warm-gray-100 flex items-center justify-center mx-auto mb-3">
-                  <TrendingUp className="w-5 h-5 text-warm-gray-400" />
+                <div className="w-12 h-12 rounded-full bg-surface-containerHigh flex items-center justify-center mx-auto mb-3">
+                  <TrendingUp className="w-5 h-5 text-onSurface-variant" />
                 </div>
-                <p className="text-sm text-warm-gray-500">
+                <p className="text-sm text-onSurface-variant">
                   Relationship graph coming soon
                 </p>
-                <p className="text-xs text-warm-gray-400 mt-1">
+                <p className="text-xs text-onSurface-variant mt-1">
                   Visualize connections and mutual contacts
                 </p>
               </div>
@@ -353,21 +353,21 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Enrichment Data (Apollo) */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-warm-gray-400" />
-              <h2 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-onSurface-variant" />
+              <h2 className="text-sm font-medium text-onSurface">
                 Enrichment Data
               </h2>
-              <span className="ml-auto text-xs text-warm-gray-400">
+              <span className="ml-auto text-xs text-onSurface-variant">
                 via Apollo
               </span>
             </div>
-            <div className="divide-y divide-warm-gray-100">
+            <div className="divide-y divide-outline-variant">
               {enrichmentData.map((item) => (
                 <div key={item.label} className="px-5 py-3">
-                  <p className="text-xs text-warm-gray-500">{item.label}</p>
-                  <p className="text-sm text-charcoal mt-0.5">{item.value}</p>
+                  <p className="text-xs text-onSurface-variant">{item.label}</p>
+                  <p className="text-sm text-onSurface mt-0.5">{item.value}</p>
                 </div>
               ))}
             </div>

@@ -48,11 +48,11 @@ export function LoadingSpinner({
       >
         <View
           style={{ width: dotSize, height: dotSize }}
-          className="bg-sienna rounded-full"
+          className="bg-primary rounded-full"
         />
       </Animated.View>
       {message && (
-        <Text className="text-warm-500 text-sm font-medium">{message}</Text>
+        <Text className="text-onSurfaceVariant text-sm font-medium">{message}</Text>
       )}
     </View>
   );
@@ -107,19 +107,19 @@ export function PulsingDots({ message }: PulsingDotsProps) {
       <View className="flex-row gap-2">
         <Animated.View
           style={dot1Style}
-          className="w-2.5 h-2.5 bg-sienna rounded-full"
+          className="w-2.5 h-2.5 bg-primary rounded-full"
         />
         <Animated.View
           style={dot2Style}
-          className="w-2.5 h-2.5 bg-sienna rounded-full"
+          className="w-2.5 h-2.5 bg-primary rounded-full"
         />
         <Animated.View
           style={dot3Style}
-          className="w-2.5 h-2.5 bg-sienna rounded-full"
+          className="w-2.5 h-2.5 bg-primary rounded-full"
         />
       </View>
       {message && (
-        <Text className="text-warm-500 text-sm font-medium">{message}</Text>
+        <Text className="text-onSurfaceVariant text-sm font-medium">{message}</Text>
       )}
     </View>
   );

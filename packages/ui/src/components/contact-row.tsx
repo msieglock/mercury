@@ -46,8 +46,8 @@ export function ContactRow({
         }
       }}
       className={cn(
-        'flex items-center gap-4 rounded-2xl border border-[#E5E2DE] bg-[#FAFAF8] px-5 py-4 transition-colors',
-        onClick && 'cursor-pointer hover:bg-[#F5F3F0]',
+        'flex items-center gap-4 rounded-xl border border-outline-variant bg-surface-containerLow px-5 py-4 transition-colors',
+        onClick && 'cursor-pointer hover:bg-surface-containerHigh',
         className,
       )}
     >
@@ -56,9 +56,9 @@ export function ContactRow({
 
       {/* Name & title */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[#1A1815]">{name}</p>
+        <p className="truncate text-sm font-semibold text-onSurface">{name}</p>
         {(title || company) && (
-          <p className="truncate text-xs text-[#6B6560]">
+          <p className="truncate text-xs text-onSurface-variant">
             {title}
             {title && company && ' \u00B7 '}
             {company}
@@ -75,17 +75,10 @@ export function ContactRow({
 
       {/* Relationship score bar */}
       <div className="flex w-20 shrink-0 flex-col items-end gap-1">
-        <span className="text-xs font-medium text-[#6B6560]">{relationshipScore}</span>
-        <div className="h-1.5 w-full rounded-full bg-[#E5E2DE]">
+        <span className="text-xs font-medium text-onSurface-variant">{relationshipScore}</span>
+        <div className="h-1.5 w-full rounded-full bg-surface-variant">
           <div
-            className={cn(
-              'h-full rounded-full transition-all',
-              relationshipScore >= 70
-                ? 'bg-emerald-500'
-                : relationshipScore >= 40
-                  ? 'bg-amber-400'
-                  : 'bg-[#D4552A]',
-            )}
+            className="h-full rounded-full bg-primary transition-all"
             style={{ width: `${Math.min(100, relationshipScore)}%` }}
           />
         </div>
@@ -93,7 +86,7 @@ export function ContactRow({
 
       {/* Last interaction */}
       {relativeTime && (
-        <span className="shrink-0 text-xs text-[#6B6560]">{relativeTime}</span>
+        <span className="shrink-0 text-xs text-onSurface-variant">{relativeTime}</span>
       )}
     </div>
   );

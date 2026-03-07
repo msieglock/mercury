@@ -32,12 +32,12 @@ export function SegmentPills({
             key={segment}
             onPress={() => handlePress(segment)}
             className={`px-4 py-2 rounded-full ${
-              isActive ? "bg-charcoal" : "bg-warm-100"
+              isActive ? "bg-secondaryContainer" : "border border-outline"
             }`}
           >
             <Text
               className={`text-sm font-medium ${
-                isActive ? "text-cream" : "text-warm-600"
+                isActive ? "text-onSecondaryContainer" : "text-onSurfaceVariant"
               }`}
             >
               {segment}

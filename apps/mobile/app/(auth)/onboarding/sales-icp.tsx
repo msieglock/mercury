@@ -28,25 +28,25 @@ export default function SalesICPScreen() {
 
   const fields: ICPField[] = [
     {
-      icon: <Building2 size={18} color="#D4552A" />,
+      icon: <Building2 size={18} color="#1A237E" />,
       label: "Target Industry",
       value: industry,
       placeholder: "e.g., B2B SaaS, Healthcare",
     },
     {
-      icon: <Users size={18} color="#D4552A" />,
+      icon: <Users size={18} color="#1A237E" />,
       label: "Company Size",
       value: companySize,
       placeholder: "e.g., 50-500 employees",
     },
     {
-      icon: <Target size={18} color="#D4552A" />,
+      icon: <Target size={18} color="#1A237E" />,
       label: "Target Roles",
       value: targetRoles,
       placeholder: "e.g., VP Sales, CRO",
     },
     {
-      icon: <MapPin size={18} color="#D4552A" />,
+      icon: <MapPin size={18} color="#1A237E" />,
       label: "Geography",
       value: geography,
       placeholder: "e.g., North America",
@@ -61,36 +61,36 @@ export default function SalesICPScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScrollView className="flex-1 px-8" contentContainerStyle={{ paddingVertical: 32 }}>
         <View className="items-center mb-8">
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             Your ideal customer
           </Text>
-          <Text className="text-warm-500 text-base text-center leading-6">
+          <Text className="text-onSurfaceVariant text-base text-center leading-6">
             Mercury analyzed your account. Review and{"\n"}adjust your target
             customer profile.
           </Text>
         </View>
 
         {/* Company info card */}
-        <View className="bg-white rounded-2xl p-5 mb-6 shadow-sm">
+        <View className="bg-surface rounded-2xl p-5 mb-6 shadow-sm">
           <View className="flex-row items-center gap-3 mb-3">
-            <View className="w-10 h-10 bg-sienna-50 rounded-xl items-center justify-center">
-              <Building2 size={20} color="#D4552A" />
+            <View className="w-10 h-10 bg-primaryContainer rounded-xl items-center justify-center">
+              <Building2 size={20} color="#1A237E" />
             </View>
             <View>
-              <Text className="text-charcoal text-base font-semibold">
+              <Text className="text-onSurface text-base font-semibold">
                 {companyName}
               </Text>
-              <Text className="text-warm-500 text-xs">
+              <Text className="text-onSurfaceVariant text-xs">
                 Company profile from Apollo
               </Text>
             </View>
           </View>
           <View className="flex-row items-center gap-2">
-            <View className="bg-sienna-50 px-2.5 py-1 rounded-full">
-              <Text className="text-sienna text-[10px] font-semibold uppercase">
+            <View className="bg-secondaryContainer px-2.5 py-1 rounded-full">
+              <Text className="text-onSecondaryContainer text-[10px] font-semibold uppercase">
                 AI Suggested
               </Text>
             </View>
@@ -100,10 +100,10 @@ export default function SalesICPScreen() {
         {/* Editable ICP fields */}
         <View className="gap-4 mb-8">
           {fields.map((field) => (
-            <View key={field.label} className="bg-white rounded-2xl p-4 shadow-sm">
+            <View key={field.label} className="bg-surface rounded-2xl p-4 shadow-sm">
               <View className="flex-row items-center gap-2 mb-2">
                 {field.icon}
-                <Text className="text-warm-600 text-xs font-semibold uppercase tracking-wider">
+                <Text className="text-onSurfaceVariant text-xs font-semibold uppercase tracking-wider">
                   {field.label}
                 </Text>
               </View>
@@ -111,8 +111,8 @@ export default function SalesICPScreen() {
                 value={field.value}
                 onChangeText={(text) => setters[field.label]?.(text)}
                 placeholder={field.placeholder}
-                placeholderTextColor="#B8B3A7"
-                className="text-charcoal text-base py-1"
+                placeholderTextColor="#767680"
+                className="text-onSurface text-base py-1"
               />
             </View>
           ))}
@@ -120,9 +120,9 @@ export default function SalesICPScreen() {
 
         <Pressable
           onPress={handleConfirm}
-          className="bg-sienna py-4 rounded-2xl items-center active:opacity-80"
+          className="bg-primary py-4 rounded-full items-center active:opacity-80"
         >
-          <Text className="text-white text-base font-semibold">
+          <Text className="text-onPrimary text-base font-semibold">
             Confirm & Find Opportunities
           </Text>
         </Pressable>

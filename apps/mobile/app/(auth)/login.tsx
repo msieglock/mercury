@@ -19,16 +19,16 @@ function OAuthButton({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         onPress();
       }}
-      className="w-full bg-white border border-warm-200 rounded-2xl py-4 px-6 flex-row items-center justify-center active:bg-warm-50"
+      className="w-full bg-surface border border-outlineVariant rounded-full py-4 px-6 flex-row items-center justify-center active:bg-surfaceContainerLow"
     >
       <View className="w-6 h-6 mr-3 items-center justify-center">
         {variant === "google" ? (
-          <Text className="text-lg font-bold text-charcoal">G</Text>
+          <Text className="text-lg font-bold text-onSurface">G</Text>
         ) : (
-          <Text className="text-lg font-bold text-charcoal">M</Text>
+          <Text className="text-lg font-bold text-onSurface">M</Text>
         )}
       </View>
-      <Text className="text-charcoal text-base font-semibold">{label}</Text>
+      <Text className="text-onSurface text-base font-semibold">{label}</Text>
     </Pressable>
   );
 }
@@ -51,22 +51,22 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream">
+    <SafeAreaView className="flex-1 bg-background">
       <View className="flex-1 justify-center px-8">
         {/* Logo */}
         <View className="items-center mb-16">
-          <Text className="text-sienna text-5xl font-serif font-bold tracking-tight">
+          <Text className="text-primary text-5xl font-bold tracking-tight">
             Mercury
           </Text>
-          <View className="w-8 h-0.5 bg-sienna mt-3 rounded-full" />
+          <View className="w-8 h-0.5 bg-primary mt-3 rounded-full" />
         </View>
 
         {/* Welcome text */}
         <View className="items-center mb-12">
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             Welcome to Mercury
           </Text>
-          <Text className="text-warm-500 text-base text-center leading-6">
+          <Text className="text-onSurfaceVariant text-base text-center leading-6">
             Your AI-powered command center
           </Text>
         </View>
@@ -87,7 +87,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View className="mt-12 items-center">
-          <Text className="text-warm-400 text-xs text-center leading-5">
+          <Text className="text-outline text-xs text-center leading-5">
             By continuing, you agree to Mercury's{"\n"}Terms of Service and
             Privacy Policy
           </Text>

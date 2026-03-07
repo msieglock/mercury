@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { cn, getInitials, segmentLabel, formatRelativeTime } from '@/lib/utils';
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const segments = [
   'all',
@@ -150,7 +150,7 @@ const outreachPathIcons: Record<string, { icon: React.ElementType; label: string
 function ScoreBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-warm-gray-100 rounded-full overflow-hidden">
+      <div className="w-16 h-1.5 bg-surface-containerHigh rounded-full overflow-hidden">
         <div
           className={cn(
             'h-full rounded-full',
@@ -160,19 +160,19 @@ function ScoreBar({ score }: { score: number }) {
                 ? 'bg-amber-400'
                 : score >= 40
                   ? 'bg-orange-400'
-                  : 'bg-warm-gray-300',
+                  : 'bg-outline',
           )}
           style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
-      <span className="text-xs font-mono text-warm-gray-500 w-6">
+      <span className="text-xs font-mono text-onSurface-variant w-6">
         {score}
       </span>
     </div>
   );
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function PeoplePage() {
   const [activeSegment, setActiveSegment] = useState('all');
@@ -193,13 +193,13 @@ export default function PeoplePage() {
     <div className="max-w-7xl mx-auto">
       {/* Search Bar */}
       <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-gray-400" />
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-onSurface-variant" />
         <input
           type="text"
           placeholder="Search contacts by name, company, or title..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 bg-white border border-warm-gray-200 rounded-mercury-lg text-sm placeholder:text-warm-gray-400 focus:outline-none focus:border-warm-gray-300 focus:shadow-mercury transition-mercury"
+          className="w-full pl-11 pr-4 py-3 bg-surface-containerHigh border border-outline-variant rounded-full text-sm placeholder:text-onSurface-variant focus:outline-none focus:border-outline focus:shadow-elevation-1 transition-m3"
         />
       </div>
 
@@ -210,10 +210,10 @@ export default function PeoplePage() {
             key={seg}
             onClick={() => setActiveSegment(seg)}
             className={cn(
-              'px-4 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-mercury',
+              'px-4 h-8 text-sm font-medium rounded-lg whitespace-nowrap transition-m3',
               activeSegment === seg
-                ? 'bg-charcoal text-cream shadow-mercury-sm'
-                : 'bg-white text-warm-gray-600 border border-warm-gray-200 hover:bg-warm-gray-50 hover:border-warm-gray-300',
+                ? 'bg-secondary-container text-onSecondary-container'
+                : 'border border-outline text-onSurface-variant hover:bg-surface-containerHigh',
             )}
           >
             {seg === 'all' ? 'All' : segmentLabel(seg)}
@@ -222,10 +222,10 @@ export default function PeoplePage() {
       </div>
 
       {/* Contact Table */}
-      <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
+      <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
         {/* Table Header */}
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_100px_80px_1fr_1fr_32px] gap-4 px-5 py-3 border-b border-warm-gray-100 text-xs font-medium text-warm-gray-500 uppercase tracking-wider">
-          <div className="flex items-center gap-1 cursor-pointer hover:text-charcoal">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_100px_80px_1fr_1fr_32px] gap-4 px-5 py-3 border-b border-outline-variant text-xs font-medium text-onSurface-variant uppercase tracking-wider">
+          <div className="flex items-center gap-1 cursor-pointer hover:text-onSurface">
             Name <ArrowUpDown className="w-3 h-3" />
           </div>
           <div>Title</div>
@@ -238,7 +238,7 @@ export default function PeoplePage() {
         </div>
 
         {/* Table Body */}
-        <div className="divide-y divide-warm-gray-100">
+        <div className="divide-y divide-outline-variant">
           {filteredContacts.map((contact) => {
             const pathInfo = contact.outreachPath
               ? outreachPathIcons[contact.outreachPath]
@@ -249,34 +249,34 @@ export default function PeoplePage() {
               <Link
                 key={contact.id}
                 href={`/people/${contact.id}`}
-                className="grid grid-cols-[2fr_1.5fr_1fr_100px_80px_1fr_1fr_32px] gap-4 px-5 py-3.5 items-center hover:bg-warm-gray-50 transition-mercury group"
+                className="grid grid-cols-[2fr_1.5fr_1fr_100px_80px_1fr_1fr_32px] gap-4 px-5 py-3.5 items-center hover:bg-surface-containerLow transition-m3 group"
               >
                 {/* Name */}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-warm-gray-300 to-warm-gray-400 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-semibold text-white">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-semibold text-onPrimary">
                       {getInitials(contact.fullName)}
                     </span>
                   </div>
-                  <span className="text-sm font-medium text-charcoal truncate">
+                  <span className="text-sm font-medium text-onSurface truncate">
                     {contact.fullName}
                   </span>
                 </div>
 
                 {/* Title */}
-                <div className="text-sm text-warm-gray-600 truncate">
+                <div className="text-sm text-onSurface-variant truncate">
                   {contact.title}
                 </div>
 
                 {/* Company */}
-                <div className="text-sm text-warm-gray-600 truncate">
+                <div className="text-sm text-onSurface-variant truncate">
                   {contact.company}
                 </div>
 
                 {/* Outreach Path */}
                 <div className="flex items-center gap-1.5">
-                  <PathIcon className="w-3.5 h-3.5 text-warm-gray-400" />
-                  <span className="text-xs text-warm-gray-500 truncate">
+                  <PathIcon className="w-3.5 h-3.5 text-onSurface-variant" />
+                  <span className="text-xs text-onSurface-variant truncate">
                     {pathInfo?.label || 'N/A'}
                   </span>
                 </div>
@@ -285,18 +285,18 @@ export default function PeoplePage() {
                 <ScoreBar score={contact.score} />
 
                 {/* Last Contact */}
-                <div className="text-xs text-warm-gray-500">
+                <div className="text-xs text-onSurface-variant">
                   {formatRelativeTime(contact.lastContact)}
                 </div>
 
                 {/* Next Action */}
-                <div className="text-xs text-warm-gray-600 truncate">
+                <div className="text-xs text-onSurface-variant truncate">
                   {contact.nextAction}
                 </div>
 
                 {/* Chevron */}
                 <div className="flex justify-end">
-                  <ChevronRight className="w-4 h-4 text-warm-gray-300 group-hover:text-warm-gray-500 transition-mercury" />
+                  <ChevronRight className="w-4 h-4 text-outline group-hover:text-onSurface transition-m3" />
                 </div>
               </Link>
             );
@@ -304,7 +304,7 @@ export default function PeoplePage() {
         </div>
 
         {filteredContacts.length === 0 && (
-          <div className="px-5 py-12 text-center text-sm text-warm-gray-500">
+          <div className="px-5 py-12 text-center text-sm text-onSurface-variant">
             No contacts found matching your criteria.
           </div>
         )}

@@ -61,7 +61,7 @@ const mockSections: DiscoverySection[] = [
   {
     title: "New prospects",
     subtitle: "Matching your ideal customer profile",
-    icon: <Sparkles size={18} color="#D4552A" />,
+    icon: <Sparkles size={18} color="#1A237E" />,
     results: [
       {
         name: "David Kim",
@@ -87,13 +87,13 @@ function ResultCard({
   return (
     <Animated.View
       entering={FadeInRight.delay(index * 200).duration(400)}
-      className="bg-warm-50 rounded-xl p-3 mb-2"
+      className="bg-surfaceContainerLow rounded-xl p-3 mb-2"
     >
-      <Text className="text-charcoal text-sm font-semibold">
+      <Text className="text-onSurface text-sm font-semibold">
         {result.name}
       </Text>
-      <Text className="text-warm-600 text-xs">{result.company}</Text>
-      <Text className="text-warm-500 text-xs mt-1">{result.detail}</Text>
+      <Text className="text-onSurfaceVariant text-xs">{result.company}</Text>
+      <Text className="text-onSurfaceVariant text-xs mt-1">{result.detail}</Text>
     </Animated.View>
   );
 }
@@ -122,16 +122,16 @@ export default function SalesDiscoveryScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingVertical: 32, paddingHorizontal: 20 }}
       >
         <View className="items-center mb-8">
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             Finding opportunities
           </Text>
-          <Text className="text-warm-500 text-base text-center">
+          <Text className="text-onSurfaceVariant text-base text-center">
             Mercury is analyzing your network...
           </Text>
         </View>
@@ -144,11 +144,11 @@ export default function SalesDiscoveryScreen() {
           >
             <View className="flex-row items-center gap-2 mb-2">
               {section.icon}
-              <Text className="text-charcoal text-base font-semibold">
+              <Text className="text-onSurface text-base font-semibold">
                 {section.title}
               </Text>
             </View>
-            <Text className="text-warm-500 text-xs mb-3">
+            <Text className="text-onSurfaceVariant text-xs mb-3">
               {section.subtitle}
             </Text>
             {section.results.map((result, resultIndex) => (
@@ -179,9 +179,9 @@ export default function SalesDiscoveryScreen() {
           <Animated.View entering={FadeInDown.duration(500)}>
             <Pressable
               onPress={handleContinue}
-              className="bg-sienna py-4 rounded-2xl flex-row items-center justify-center gap-2 active:opacity-80 mt-4"
+              className="bg-primary py-4 rounded-full flex-row items-center justify-center gap-2 active:opacity-80 mt-4"
             >
-              <Text className="text-white text-base font-semibold">
+              <Text className="text-onPrimary text-base font-semibold">
                 Go to your dashboard
               </Text>
               <ArrowRight size={18} color="white" />

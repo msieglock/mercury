@@ -5,7 +5,7 @@ import { ChevronDown, Plus, Filter } from 'lucide-react';
 import { PipelineBoard } from '@/components/pipeline-board';
 import { cn } from '@/lib/utils';
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const pipelines = [
   { id: '1', name: 'Sales Pipeline', type: 'sales' },
@@ -125,7 +125,7 @@ const mockColumns = [
   },
 ];
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function PipelinePage() {
   const [selectedPipeline, setSelectedPipeline] = useState(pipelines[0]);
@@ -149,13 +149,13 @@ export default function PipelinePage() {
           <div className="relative">
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-warm-gray-200 rounded-mercury text-sm font-medium text-charcoal hover:border-warm-gray-300 transition-mercury"
+              className="flex items-center gap-2 px-4 py-2.5 bg-surface border border-outline-variant rounded-full text-sm font-medium text-onSurface hover:border-outline transition-m3"
             >
               {selectedPipeline.name}
-              <ChevronDown className="w-4 h-4 text-warm-gray-400" />
+              <ChevronDown className="w-4 h-4 text-onSurface-variant" />
             </button>
             {dropdownOpen && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-warm-gray-200 rounded-mercury shadow-mercury-md z-10 py-1">
+              <div className="absolute top-full left-0 mt-1 w-56 bg-surface-containerHigh border border-outline-variant rounded-md shadow-elevation-2 z-10 py-1">
                 {pipelines.map((pipeline) => (
                   <button
                     key={pipeline.id}
@@ -164,10 +164,10 @@ export default function PipelinePage() {
                       setDropdownOpen(false);
                     }}
                     className={cn(
-                      'w-full text-left px-4 py-2.5 text-sm transition-mercury',
+                      'w-full text-left px-4 py-2.5 text-sm transition-m3',
                       selectedPipeline.id === pipeline.id
-                        ? 'bg-warm-gray-50 text-charcoal font-medium'
-                        : 'text-warm-gray-600 hover:bg-warm-gray-50 hover:text-charcoal',
+                        ? 'bg-secondary-container text-onSecondary-container font-medium'
+                        : 'text-onSurface hover:bg-surface-container',
                     )}
                   >
                     {pipeline.name}
@@ -178,13 +178,13 @@ export default function PipelinePage() {
           </div>
 
           {/* Summary stats */}
-          <div className="flex items-center gap-4 text-sm text-warm-gray-500">
+          <div className="flex items-center gap-4 text-sm text-onSurface-variant">
             <span>
-              <span className="font-semibold text-charcoal">{totalDeals}</span>{' '}
+              <span className="font-medium text-onSurface">{totalDeals}</span>{' '}
               deals
             </span>
             <span>
-              <span className="font-semibold text-charcoal">
+              <span className="font-medium text-onSurface">
                 ${(totalValue / 1000).toFixed(0)}K
               </span>{' '}
               total value
@@ -193,11 +193,11 @@ export default function PipelinePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-warm-gray-500 hover:text-charcoal hover:bg-warm-gray-100 rounded-mercury transition-mercury">
+          <button className="flex items-center gap-1.5 px-4 h-10 text-sm text-onSurface-variant hover:text-onSurface hover:bg-surface-containerHigh rounded-full transition-m3">
             <Filter className="w-4 h-4" />
             Filter
           </button>
-          <button className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-charcoal text-cream rounded-mercury hover:bg-charcoal-400 transition-mercury shadow-mercury-sm">
+          <button className="flex items-center gap-1.5 px-6 h-10 text-sm font-medium bg-primary text-onPrimary rounded-full hover:shadow-elevation-1 transition-m3">
             <Plus className="w-4 h-4" />
             Add Deal
           </button>

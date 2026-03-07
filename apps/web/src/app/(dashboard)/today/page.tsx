@@ -15,7 +15,7 @@ import {
 import { ActionCard } from '@/components/action-card';
 import { StatCard } from '@/components/stat-card';
 import { cn } from '@/lib/utils';
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const mockActions = [
   {
@@ -149,7 +149,7 @@ const autoActions = [
   { label: 'Classified 12 incoming emails', time: '6h ago' },
 ];
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function TodayPage() {
   const hour = new Date().getHours();
@@ -160,13 +160,13 @@ export default function TodayPage() {
     <div className="max-w-7xl mx-auto">
       {/* Morning Briefing */}
       <div className="mb-8">
-        <h2 className="text-2xl font-serif font-semibold text-charcoal">
+        <h2 className="text-2xl font-medium text-onSurface">
           {greeting}, John.
         </h2>
-        <p className="text-warm-gray-500 mt-1">
+        <p className="text-onSurface-variant mt-1">
           Here&apos;s your day. You have{' '}
-          <span className="font-medium text-charcoal">6 actions</span> and{' '}
-          <span className="font-medium text-charcoal">4 meetings</span> today.
+          <span className="font-medium text-onSurface">6 actions</span> and{' '}
+          <span className="font-medium text-onSurface">4 meetings</span> today.
         </p>
 
         {/* Stats Row */}
@@ -207,10 +207,10 @@ export default function TodayPage() {
         {/* LEFT COLUMN - Action Cards */}
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-serif font-semibold text-charcoal">
+            <h3 className="text-lg font-medium text-onSurface">
               Action Feed
             </h3>
-            <div className="flex items-center gap-2 text-xs text-warm-gray-500">
+            <div className="flex items-center gap-2 text-xs text-onSurface-variant">
               <span>Sorted by priority</span>
             </div>
           </div>
@@ -237,8 +237,8 @@ export default function TodayPage() {
           {/* Auto-actions */}
           <div className="mt-8">
             <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-warm-gray-400" />
-              <h4 className="text-sm font-semibold text-warm-gray-500">
+              <Bot className="w-4 h-4 text-onSurface-variant" />
+              <h4 className="text-sm font-medium text-onSurface-variant">
                 Auto-actions
               </h4>
             </div>
@@ -246,13 +246,13 @@ export default function TodayPage() {
               {autoActions.map((action, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-3 px-4 py-2.5 bg-warm-gray-50 rounded-mercury text-sm"
+                  className="flex items-center gap-3 px-4 py-2.5 bg-surface-container rounded-md text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span className="flex-1 text-warm-gray-600">
+                  <span className="flex-1 text-onSurface-variant">
                     {action.label}
                   </span>
-                  <span className="text-xs text-warm-gray-400">
+                  <span className="text-xs text-onSurface-variant">
                     {action.time}
                   </span>
                 </div>
@@ -264,33 +264,33 @@ export default function TodayPage() {
         {/* RIGHT COLUMN */}
         <div className="space-y-6">
           {/* Today's Meetings */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-warm-gray-400" />
-              <h3 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-onSurface-variant" />
+              <h3 className="text-sm font-medium text-onSurface">
                 Today&apos;s Meetings
               </h3>
             </div>
-            <div className="divide-y divide-warm-gray-100">
+            <div className="divide-y divide-outline-variant">
               {mockMeetings.map((meeting) => (
                 <div
                   key={meeting.id}
-                  className="px-5 py-3.5 hover:bg-warm-gray-50 transition-mercury cursor-pointer"
+                  className="px-5 py-3.5 hover:bg-surface-containerLow transition-m3 cursor-pointer"
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-medium text-sienna">
+                        <span className="text-xs font-mono font-medium text-primary">
                           {meeting.time}
                         </span>
-                        <span className="text-xs text-warm-gray-400">
+                        <span className="text-xs text-onSurface-variant">
                           {meeting.duration}
                         </span>
                       </div>
-                      <p className="text-sm font-medium text-charcoal mt-0.5">
+                      <p className="text-sm font-medium text-onSurface mt-0.5">
                         {meeting.title}
                       </p>
-                      <p className="text-xs text-warm-gray-500 mt-0.5">
+                      <p className="text-xs text-onSurface-variant mt-0.5">
                         {meeting.attendees.join(', ')}
                       </p>
                     </div>
@@ -301,10 +301,10 @@ export default function TodayPage() {
           </div>
 
           {/* Pipeline Health */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-warm-gray-400" />
-              <h3 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-onSurface-variant" />
+              <h3 className="text-sm font-medium text-onSurface">
                 Pipeline Health
               </h3>
             </div>
@@ -312,16 +312,16 @@ export default function TodayPage() {
               {pipelineHealth.map((stage) => (
                 <div key={stage.stage}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-warm-gray-600">
+                    <span className="text-xs font-medium text-onSurface-variant">
                       {stage.stage}
                     </span>
-                    <span className="text-xs text-warm-gray-400">
+                    <span className="text-xs text-onSurface-variant">
                       {stage.count}
                     </span>
                   </div>
-                  <div className="w-full h-2 bg-warm-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-surface-containerHigh rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-charcoal rounded-full transition-all"
+                      className="h-full bg-primary rounded-full transition-all"
                       style={{ width: `${stage.percentage}%` }}
                     />
                   </div>
@@ -332,15 +332,15 @@ export default function TodayPage() {
 
           {/* Quick Stats */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-mercury border border-warm-gray-200 p-4">
-              <p className="text-xs text-warm-gray-500">Avg. Response</p>
-              <p className="text-lg font-serif font-semibold text-charcoal mt-1">
+            <div className="bg-surface border border-outline-variant rounded-md p-4">
+              <p className="text-xs text-onSurface-variant">Avg. Response</p>
+              <p className="text-lg font-medium text-onSurface mt-1">
                 2.4h
               </p>
             </div>
-            <div className="bg-white rounded-mercury border border-warm-gray-200 p-4">
-              <p className="text-xs text-warm-gray-500">Win Rate</p>
-              <p className="text-lg font-serif font-semibold text-charcoal mt-1">
+            <div className="bg-surface border border-outline-variant rounded-md p-4">
+              <p className="text-xs text-onSurface-variant">Win Rate</p>
+              <p className="text-lg font-medium text-onSurface mt-1">
                 34%
               </p>
             </div>

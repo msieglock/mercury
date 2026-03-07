@@ -32,16 +32,16 @@ export default function OnboardingLinkedInScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <View className="flex-1 justify-center px-8">
         <View className="items-center mb-10">
-          <View className="w-16 h-16 bg-blue-50 rounded-full items-center justify-center mb-5">
+          <View className="w-16 h-16 bg-primaryContainer rounded-full items-center justify-center mb-5">
             <Linkedin size={28} color="#0A66C2" />
           </View>
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             Import your network
           </Text>
-          <Text className="text-warm-500 text-base text-center leading-6">
+          <Text className="text-onSurfaceVariant text-base text-center leading-6">
             Upload your LinkedIn connections{"\n"}to unlock warm introductions.
           </Text>
         </View>
@@ -49,22 +49,22 @@ export default function OnboardingLinkedInScreen() {
         {!isUploading && !isUploaded && (
           <Pressable
             onPress={handleUploadCSV}
-            className="w-full bg-white border-2 border-dashed border-warm-300 rounded-2xl py-8 items-center active:bg-warm-50"
+            className="w-full bg-surface border-2 border-dashed border-outline rounded-2xl py-8 items-center active:bg-surfaceContainerLow"
           >
-            <Upload size={32} color="#98917F" />
-            <Text className="text-charcoal text-base font-semibold mt-3">
+            <Upload size={32} color="#767680" />
+            <Text className="text-onSurface text-base font-semibold mt-3">
               Upload LinkedIn CSV
             </Text>
-            <Text className="text-warm-500 text-sm mt-1">
+            <Text className="text-onSurfaceVariant text-sm mt-1">
               Export from LinkedIn Settings
             </Text>
           </Pressable>
         )}
 
         {isUploading && (
-          <View className="w-full bg-white border border-warm-200 rounded-2xl py-8 items-center">
-            <Loader2 size={32} color="#D4552A" />
-            <Text className="text-charcoal text-base font-semibold mt-3">
+          <View className="w-full bg-surface border border-outlineVariant rounded-2xl py-8 items-center">
+            <Loader2 size={32} color="#1A237E" />
+            <Text className="text-onSurface text-base font-semibold mt-3">
               Processing contacts...
             </Text>
           </View>
@@ -84,7 +84,7 @@ export default function OnboardingLinkedInScreen() {
         {/* Background activity indicator */}
         <View className="flex-row items-center justify-center mt-6 gap-2">
           <View className="w-2 h-2 bg-green-500 rounded-full" />
-          <Text className="text-warm-500 text-xs">
+          <Text className="text-onSurfaceVariant text-xs">
             Working in background...
           </Text>
         </View>
@@ -93,9 +93,9 @@ export default function OnboardingLinkedInScreen() {
           {isUploaded && (
             <Pressable
               onPress={handleContinue}
-              className="bg-sienna py-4 rounded-2xl items-center active:opacity-80"
+              className="bg-primary py-4 rounded-full items-center active:opacity-80"
             >
-              <Text className="text-white text-base font-semibold">
+              <Text className="text-onPrimary text-base font-semibold">
                 Continue
               </Text>
             </Pressable>
@@ -105,7 +105,7 @@ export default function OnboardingLinkedInScreen() {
               onPress={handleSkip}
               className="py-4 items-center active:opacity-60"
             >
-              <Text className="text-warm-500 text-base font-medium">
+              <Text className="text-onSurfaceVariant text-base font-medium">
                 Skip for now
               </Text>
             </Pressable>

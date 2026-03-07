@@ -17,7 +17,7 @@ function ProgressIndicator() {
         <View
           key={step}
           className={`flex-1 h-1 rounded-full ${
-            index <= activeIndex ? "bg-sienna" : "bg-warm-200"
+            index <= activeIndex ? "bg-primary" : "bg-outlineVariant"
           }`}
         />
       ))}
@@ -27,12 +27,12 @@ function ProgressIndicator() {
 
 export default function OnboardingLayout() {
   return (
-    <View className="flex-1 bg-cream">
+    <View className="flex-1 bg-background">
       <ProgressIndicator />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: "#FAFAF8" },
+          contentStyle: { backgroundColor: "#FEFBFF" },
           animation: "slide_from_right",
         }}
       />

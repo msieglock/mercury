@@ -40,14 +40,14 @@ export function Avatar({
           src={src}
           alt={name}
           className={cn(
-            'rounded-full object-cover ring-2 ring-[#FAFAF8]',
+            'rounded-full object-cover ring-2 ring-surface',
             sizeClasses[size],
           )}
         />
       ) : (
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-[#F0EEEB] font-medium text-[#1A1815]',
+            'flex items-center justify-center rounded-full bg-primary-container font-medium text-onPrimary-container',
             sizeClasses[size],
           )}
         >
@@ -57,9 +57,9 @@ export function Avatar({
       {online !== undefined && (
         <span
           className={cn(
-            'absolute bottom-0 right-0 rounded-full border-2 border-[#FAFAF8]',
+            'absolute bottom-0 right-0 rounded-full border-2 border-surface',
             indicatorSizeClasses[size],
-            online ? 'bg-emerald-500' : 'bg-gray-300',
+            online ? 'bg-primary' : 'bg-outline-variant',
           )}
         />
       )}

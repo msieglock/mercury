@@ -13,7 +13,7 @@ export default function DashboardLayout({
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   return (
-    <div className="min-h-full">
+    <div className="min-h-full bg-background">
       <Sidebar />
       <div className="pl-[280px]">
         <Header onOpenCommandPalette={() => setCommandPaletteOpen(true)} />

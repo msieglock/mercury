@@ -51,8 +51,8 @@ const agentConfig: Record<
 > = {
   "follow-up": {
     label: "Follow Up",
-    color: "sienna",
-    icon: <Mail size={14} color="#D4552A" />,
+    color: "primary",
+    icon: <Mail size={14} color="#1A237E" />,
   },
   reply: {
     label: "Reply Needed",
@@ -87,7 +87,7 @@ const agentConfig: Record<
   "log-notes": {
     label: "Log Notes",
     color: "muted",
-    icon: <Pencil size={14} color="#7A7265" />,
+    icon: <Pencil size={14} color="#767680" />,
   },
 };
 
@@ -156,23 +156,23 @@ export function ActionCard({
       {/* Swipe right background - Approve */}
       <Animated.View
         style={rightActionStyle}
-        className="absolute inset-0 bg-green-500 rounded-2xl items-start justify-center pl-6"
+        className="absolute inset-0 bg-primaryContainer rounded-2xl items-start justify-center pl-6"
       >
-        <Check size={24} color="white" />
+        <Check size={24} color="#1A237E" />
       </Animated.View>
 
       {/* Swipe left background - Dismiss */}
       <Animated.View
         style={leftActionStyle}
-        className="absolute inset-0 bg-warm-400 rounded-2xl items-end justify-center pr-6"
+        className="absolute inset-0 bg-errorContainer rounded-2xl items-end justify-center pr-6"
       >
-        <X size={24} color="white" />
+        <X size={24} color="#BA1A1A" />
       </Animated.View>
 
       <GestureDetector gesture={panGesture}>
         <Animated.View
           style={cardStyle}
-          className="bg-white rounded-2xl p-4 shadow-sm"
+          className="bg-surfaceContainerLow rounded-2xl p-4 shadow-sm"
         >
           {/* Agent badge row */}
           <View className="flex-row items-center justify-between mb-2.5">
@@ -186,8 +186,8 @@ export function ActionCard({
             </View>
             {timeEstimate && (
               <View className="flex-row items-center gap-1">
-                <Clock size={11} color="#98917F" />
-                <Text className="text-warm-500 text-[11px]">
+                <Clock size={11} color="#767680" />
+                <Text className="text-onSurfaceVariant text-[11px]">
                   {timeEstimate}
                 </Text>
               </View>
@@ -195,10 +195,10 @@ export function ActionCard({
           </View>
 
           {/* Content */}
-          <Text className="text-charcoal text-base font-semibold mb-1">
+          <Text className="text-onSurface text-base font-semibold mb-1">
             {title}
           </Text>
-          <Text className="text-warm-500 text-sm leading-5 mb-4">
+          <Text className="text-onSurfaceVariant text-sm leading-5 mb-4">
             {subtitle}
           </Text>
 
@@ -209,9 +209,9 @@ export function ActionCard({
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 onAction?.();
               }}
-              className="bg-sienna px-5 py-2.5 rounded-full active:opacity-80"
+              className="bg-primary px-5 py-2.5 rounded-full active:opacity-80"
             >
-              <Text className="text-white text-sm font-semibold">
+              <Text className="text-onPrimary text-sm font-semibold">
                 {actionLabel}
               </Text>
             </Pressable>
@@ -222,7 +222,7 @@ export function ActionCard({
               }}
               className="px-4 py-2.5 active:opacity-60"
             >
-              <Text className="text-warm-500 text-sm font-medium">
+              <Text className="text-onSurfaceVariant text-sm font-medium">
                 Dismiss
               </Text>
             </Pressable>

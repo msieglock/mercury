@@ -28,16 +28,16 @@ export default function OnboardingEmailScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <View className="flex-1 justify-center px-8">
         <View className="items-center mb-10">
-          <View className="w-16 h-16 bg-sienna-50 rounded-full items-center justify-center mb-5">
-            <Mail size={28} color="#D4552A" />
+          <View className="w-16 h-16 bg-primaryContainer rounded-full items-center justify-center mb-5">
+            <Mail size={28} color="#1A237E" />
           </View>
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             Link your email
           </Text>
-          <Text className="text-warm-500 text-base text-center leading-6">
+          <Text className="text-onSurfaceVariant text-base text-center leading-6">
             Mercury learns your communication style{"\n"}from your existing
             emails.
           </Text>
@@ -46,8 +46,8 @@ export default function OnboardingEmailScreen() {
         {isLinking && (
           <View className="items-center mb-8">
             <PulsingDots message="Training your AI voice..." />
-            <View className="w-48 h-1.5 bg-warm-100 rounded-full mt-4 overflow-hidden">
-              <View className="h-full bg-sienna rounded-full w-1/3" />
+            <View className="w-48 h-1.5 bg-surfaceContainerHigh rounded-full mt-4 overflow-hidden">
+              <View className="h-full bg-primary rounded-full w-1/3" />
             </View>
           </View>
         )}
@@ -67,19 +67,19 @@ export default function OnboardingEmailScreen() {
           <View className="gap-4">
             <Pressable
               onPress={() => handleLinkEmail("google")}
-              className="w-full bg-white border border-warm-200 rounded-2xl py-4 px-6 flex-row items-center justify-center active:bg-warm-50"
+              className="w-full bg-surface border border-outlineVariant rounded-2xl py-4 px-6 flex-row items-center justify-center active:bg-surfaceContainerLow"
             >
-              <Text className="text-lg font-bold text-charcoal mr-3">G</Text>
-              <Text className="text-charcoal text-base font-semibold">
+              <Text className="text-lg font-bold text-onSurface mr-3">G</Text>
+              <Text className="text-onSurface text-base font-semibold">
                 Google Workspace
               </Text>
             </Pressable>
             <Pressable
               onPress={() => handleLinkEmail("microsoft")}
-              className="w-full bg-white border border-warm-200 rounded-2xl py-4 px-6 flex-row items-center justify-center active:bg-warm-50"
+              className="w-full bg-surface border border-outlineVariant rounded-2xl py-4 px-6 flex-row items-center justify-center active:bg-surfaceContainerLow"
             >
-              <Text className="text-lg font-bold text-charcoal mr-3">M</Text>
-              <Text className="text-charcoal text-base font-semibold">
+              <Text className="text-lg font-bold text-onSurface mr-3">M</Text>
+              <Text className="text-onSurface text-base font-semibold">
                 Microsoft 365
               </Text>
             </Pressable>
@@ -89,9 +89,9 @@ export default function OnboardingEmailScreen() {
         {isLinked && (
           <Pressable
             onPress={handleContinue}
-            className="bg-sienna py-4 rounded-2xl items-center active:opacity-80 mt-4"
+            className="bg-primary py-4 rounded-full items-center active:opacity-80 mt-4"
           >
-            <Text className="text-white text-base font-semibold">Continue</Text>
+            <Text className="text-onPrimary text-base font-semibold">Continue</Text>
           </Pressable>
         )}
       </View>

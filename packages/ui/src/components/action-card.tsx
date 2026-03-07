@@ -11,10 +11,10 @@ export interface ActionCardProps {
 }
 
 const priorityStyles: Record<ActionCardType['priority'], string> = {
-  urgent: 'border-l-red-500',
-  high: 'border-l-[#D4552A]',
-  medium: 'border-l-amber-400',
-  low: 'border-l-[#E5E2DE]',
+  urgent: 'border-l-error',
+  high: 'border-l-error',
+  medium: 'border-l-tertiary',
+  low: 'border-l-outline-variant',
 };
 
 const priorityBadgeVariant: Record<ActionCardType['priority'], 'danger' | 'accent' | 'warning' | 'default'> = {
@@ -41,7 +41,7 @@ export function ActionCard({
   return (
     <div
       className={cn(
-        'relative rounded-2xl border border-[#E5E2DE] border-l-4 bg-[#FAFAF8] p-5 shadow-sm transition-shadow hover:shadow-md',
+        'relative rounded-xl border border-outline-variant border-l-4 bg-surface-containerLow p-5 shadow-elevation-1 transition-shadow hover:shadow-elevation-2',
         priorityStyles[action.priority],
         className,
       )}
@@ -49,11 +49,11 @@ export function ActionCard({
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-[#1A1815]">
+          <h3 className="text-sm font-semibold text-onSurface">
             {action.title}
           </h3>
           {action.contact_name && (
-            <p className="mt-0.5 text-xs text-[#6B6560]">
+            <p className="mt-0.5 text-xs text-onSurface-variant">
               {action.contact_name}
               {action.company_name && ` \u00B7 ${action.company_name}`}
             </p>
@@ -69,14 +69,14 @@ export function ActionCard({
 
       {/* Description */}
       {action.description && (
-        <p className="mb-4 text-sm leading-relaxed text-[#6B6560]">
+        <p className="mb-4 text-sm leading-relaxed text-onSurface-variant">
           {action.description}
         </p>
       )}
 
       {/* Overdue indicator */}
       {action.is_overdue && (
-        <p className="mb-3 text-xs font-medium text-red-500">
+        <p className="mb-3 text-xs font-medium text-error">
           Overdue
         </p>
       )}
@@ -86,14 +86,14 @@ export function ActionCard({
         <button
           type="button"
           onClick={onPrimaryAction}
-          className="rounded-xl bg-[#D4552A] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#B8441F] focus:outline-none focus:ring-2 focus:ring-[#D4552A]/50 focus:ring-offset-2"
+          className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-onPrimary transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
         >
           {action.primary_action_label}
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-xl px-4 py-2 text-sm font-medium text-[#6B6560] transition-colors hover:bg-[#F0EEEB] focus:outline-none focus:ring-2 focus:ring-[#E5E2DE] focus:ring-offset-2"
+          className="rounded-full px-4 py-2 text-sm font-medium text-onSurface-variant transition-colors hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-outline-variant focus:ring-offset-2"
         >
           Dismiss
         </button>

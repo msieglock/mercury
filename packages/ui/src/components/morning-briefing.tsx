@@ -41,15 +41,15 @@ export function MorningBriefing({
   return (
     <div
       className={cn(
-        'rounded-2xl border border-[#E5E2DE] bg-[#FAFAF8] p-6 shadow-sm',
+        'rounded-xl border border-outline-variant bg-surface-containerLow p-6 shadow-elevation-1',
         className,
       )}
     >
       {/* Greeting */}
-      <h2 className="text-xl font-semibold text-[#1A1815]">
+      <h2 className="text-xl font-semibold text-onSurface">
         {displayGreeting}, {firstName}
       </h2>
-      <p className="mt-1 text-sm text-[#6B6560]">
+      <p className="mt-1 text-sm text-onSurface-variant">
         Here&apos;s what needs your attention today.
       </p>
 
@@ -58,15 +58,15 @@ export function MorningBriefing({
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="flex min-w-[120px] flex-1 flex-col items-center gap-1 rounded-xl bg-[#F0EEEB] px-4 py-3"
+            className="flex min-w-[120px] flex-1 flex-col items-center gap-1 rounded-xl bg-surface-container px-4 py-3"
           >
             {stat.icon && (
-              <span className="text-[#6B6560]">{stat.icon}</span>
+              <span className="text-onSurface-variant">{stat.icon}</span>
             )}
-            <span className="text-lg font-semibold text-[#1A1815]">
+            <span className="text-lg font-semibold text-primary">
               {stat.value}
             </span>
-            <span className="text-xs text-[#6B6560]">{stat.label}</span>
+            <span className="text-xs text-onSurface-variant">{stat.label}</span>
           </div>
         ))}
       </div>
@@ -74,20 +74,20 @@ export function MorningBriefing({
       {/* Pipeline health bar */}
       {pipelineHealth.length > 0 && (
         <div className="mt-5">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[#6B6560]">
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-onSurface-variant">
             Pipeline Health
           </h3>
-          <div className="flex h-3 overflow-hidden rounded-full bg-[#E5E2DE]">
+          <div className="flex h-3 overflow-hidden rounded-full bg-surface-variant">
             {pipelineHealth.map((segment, i) => {
               const colors = [
-                'bg-[#D4552A]',
-                'bg-amber-400',
-                'bg-emerald-500',
-                'bg-sky-500',
-                'bg-violet-500',
-                'bg-pink-400',
-                'bg-teal-400',
-                'bg-orange-400',
+                'bg-primary',
+                'bg-secondary',
+                'bg-tertiary',
+                'bg-primary-container',
+                'bg-secondary-container',
+                'bg-tertiary-container',
+                'bg-outline',
+                'bg-outline-variant',
               ];
               return (
                 <div
@@ -105,14 +105,14 @@ export function MorningBriefing({
           <div className="mt-2 flex flex-wrap gap-3">
             {pipelineHealth.map((segment, i) => {
               const dotColors = [
-                'bg-[#D4552A]',
-                'bg-amber-400',
-                'bg-emerald-500',
-                'bg-sky-500',
-                'bg-violet-500',
-                'bg-pink-400',
-                'bg-teal-400',
-                'bg-orange-400',
+                'bg-primary',
+                'bg-secondary',
+                'bg-tertiary',
+                'bg-primary-container',
+                'bg-secondary-container',
+                'bg-tertiary-container',
+                'bg-outline',
+                'bg-outline-variant',
               ];
               return (
                 <div key={segment.stage} className="flex items-center gap-1.5">
@@ -122,7 +122,7 @@ export function MorningBriefing({
                       dotColors[i % dotColors.length],
                     )}
                   />
-                  <span className="text-xs text-[#6B6560]">
+                  <span className="text-xs text-onSurface-variant">
                     {segment.stage} ({segment.count})
                   </span>
                 </div>

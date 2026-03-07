@@ -13,7 +13,7 @@ import {
 import { StatCard } from '@/components/stat-card';
 import { cn } from '@/lib/utils';
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────
+// --- Mock Data ---------------------------------------------------------------
 
 const weeklyActivity = [
   { day: 'Mon', emails: 12, meetings: 3, actions: 8 },
@@ -42,7 +42,7 @@ const agentPerformance = [
 
 const maxEmails = Math.max(...weeklyActivity.map((d) => d.emails));
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// --- Component ---------------------------------------------------------------
 
 export default function AnalyticsPage() {
   return (
@@ -83,10 +83,10 @@ export default function AnalyticsPage() {
         {/* LEFT */}
         <div className="space-y-6">
           {/* Weekly Activity Chart */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-warm-gray-400" />
-              <h3 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <Activity className="w-4 h-4 text-onSurface-variant" />
+              <h3 className="text-sm font-medium text-onSurface">
                 Weekly Activity
               </h3>
             </div>
@@ -97,24 +97,24 @@ export default function AnalyticsPage() {
                   <div key={day.day} className="flex-1 flex flex-col items-center gap-1">
                     <div className="w-full flex flex-col gap-1 items-center">
                       <div
-                        className="w-full bg-charcoal/80 rounded-t transition-all"
+                        className="w-full bg-primary/80 rounded-t transition-all"
                         style={{
                           height: `${(day.emails / maxEmails) * 120}px`,
                         }}
                       />
                     </div>
-                    <span className="text-xs text-warm-gray-500 mt-2">
+                    <span className="text-xs text-onSurface-variant mt-2">
                       {day.day}
                     </span>
-                    <span className="text-[10px] text-warm-gray-400">
+                    <span className="text-[10px] text-onSurface-variant">
                       {day.emails}
                     </span>
                   </div>
                 ))}
               </div>
-              <div className="flex items-center justify-center gap-6 mt-4 text-xs text-warm-gray-500">
+              <div className="flex items-center justify-center gap-6 mt-4 text-xs text-onSurface-variant">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-charcoal/80" />
+                  <span className="w-2.5 h-2.5 rounded-sm bg-primary/80" />
                   Emails sent
                 </span>
               </div>
@@ -122,15 +122,15 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Agent Performance */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-warm-gray-400" />
-              <h3 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-onSurface-variant" />
+              <h3 className="text-sm font-medium text-onSurface">
                 AI Agent Performance
               </h3>
             </div>
-            <div className="divide-y divide-warm-gray-100">
-              <div className="grid grid-cols-4 px-5 py-2.5 text-xs font-medium text-warm-gray-500 uppercase tracking-wider">
+            <div className="divide-y divide-outline-variant">
+              <div className="grid grid-cols-4 px-5 py-2.5 text-xs font-medium text-onSurface-variant uppercase tracking-wider">
                 <div>Agent</div>
                 <div>Tasks</div>
                 <div>Accuracy</div>
@@ -141,24 +141,24 @@ export default function AnalyticsPage() {
                   key={agent.agent}
                   className="grid grid-cols-4 px-5 py-3.5 items-center"
                 >
-                  <div className="text-sm font-medium text-charcoal">
+                  <div className="text-sm font-medium text-onSurface">
                     {agent.agent}
                   </div>
-                  <div className="text-sm text-warm-gray-600">
+                  <div className="text-sm text-onSurface-variant">
                     {agent.tasksCompleted}
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-12 h-1.5 bg-warm-gray-100 rounded-full overflow-hidden">
+                    <div className="w-12 h-1.5 bg-surface-containerHigh rounded-full overflow-hidden">
                       <div
                         className="h-full bg-emerald-500 rounded-full"
                         style={{ width: `${agent.accuracy}%` }}
                       />
                     </div>
-                    <span className="text-xs text-warm-gray-500">
+                    <span className="text-xs text-onSurface-variant">
                       {agent.accuracy}%
                     </span>
                   </div>
-                  <div className="text-sm text-warm-gray-500">
+                  <div className="text-sm text-onSurface-variant">
                     {agent.tokensUsed}
                   </div>
                 </div>
@@ -170,38 +170,38 @@ export default function AnalyticsPage() {
         {/* RIGHT */}
         <div className="space-y-6">
           {/* Top Contacts */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-warm-gray-100 flex items-center gap-2">
-              <Users className="w-4 h-4 text-warm-gray-400" />
-              <h3 className="text-sm font-semibold text-charcoal">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+              <Users className="w-4 h-4 text-onSurface-variant" />
+              <h3 className="text-sm font-medium text-onSurface">
                 Most Active Contacts
               </h3>
             </div>
-            <div className="divide-y divide-warm-gray-100">
+            <div className="divide-y divide-outline-variant">
               {topContacts.map((contact, i) => (
                 <div
                   key={contact.name}
-                  className="px-5 py-3 flex items-center gap-3 hover:bg-warm-gray-50 transition-mercury cursor-pointer"
+                  className="px-5 py-3 flex items-center gap-3 hover:bg-surface-containerLow transition-m3 cursor-pointer"
                 >
-                  <span className="text-xs font-mono text-warm-gray-400 w-4">
+                  <span className="text-xs font-mono text-onSurface-variant w-4">
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-charcoal truncate">
+                    <p className="text-sm font-medium text-onSurface truncate">
                       {contact.name}
                     </p>
-                    <p className="text-xs text-warm-gray-500 truncate">
+                    <p className="text-xs text-onSurface-variant truncate">
                       {contact.company}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-mono text-warm-gray-600">
+                    <span className="text-sm font-mono text-onSurface-variant">
                       {contact.interactions}
                     </span>
                     {contact.trend === 'up' ? (
                       <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                     ) : (
-                      <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                      <TrendingDown className="w-3.5 h-3.5 text-error" />
                     )}
                   </div>
                 </div>
@@ -210,8 +210,8 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Quick Insights */}
-          <div className="bg-white rounded-mercury-lg border border-warm-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-charcoal mb-4">
+          <div className="bg-surface rounded-xl border border-outline-variant p-5">
+            <h3 className="text-sm font-medium text-onSurface mb-4">
               This Week&apos;s Insights
             </h3>
             <div className="space-y-3">
@@ -221,8 +221,8 @@ export default function AnalyticsPage() {
                 'Scout identified 8 new ICP matches this week',
                 'Average deal velocity: 23 days (down from 28)',
               ].map((insight, i) => (
-                <p key={i} className="text-sm text-warm-gray-600 leading-relaxed flex items-start gap-2">
-                  <span className="w-1 h-1 rounded-full bg-sienna mt-2 flex-shrink-0" />
+                <p key={i} className="text-sm text-onSurface-variant leading-relaxed flex items-start gap-2">
+                  <span className="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0" />
                   {insight}
                 </p>
               ))}

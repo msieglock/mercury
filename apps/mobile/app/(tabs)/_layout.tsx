@@ -14,15 +14,15 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#FAFAF8",
-          borderTopColor: "#ECEAE4",
+          backgroundColor: "#FEFBFF",
+          borderTopColor: "#C7C5D0",
           borderTopWidth: 1,
           height: Platform.OS === "ios" ? 88 : 64,
           paddingTop: 8,
           paddingBottom: Platform.OS === "ios" ? 28 : 8,
         },
-        tabBarActiveTintColor: "#D4552A",
-        tabBarInactiveTintColor: "#98917F",
+        tabBarActiveTintColor: "#1A237E",
+        tabBarInactiveTintColor: "#767680",
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
@@ -34,8 +34,14 @@ export default function TabsLayout() {
         name="today"
         options={{
           title: "Today",
-          tabBarIcon: ({ color, size }) => (
-            <Sun size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View
+              className={`px-4 py-1 rounded-full ${
+                focused ? "bg-secondaryContainer" : ""
+              }`}
+            >
+              <Sun size={size} color={color} />
+            </View>
           ),
         }}
       />
@@ -43,8 +49,14 @@ export default function TabsLayout() {
         name="people"
         options={{
           title: "People",
-          tabBarIcon: ({ color, size }) => (
-            <Users size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View
+              className={`px-4 py-1 rounded-full ${
+                focused ? "bg-secondaryContainer" : ""
+              }`}
+            >
+              <Users size={size} color={color} />
+            </View>
           ),
         }}
       />
@@ -52,8 +64,14 @@ export default function TabsLayout() {
         name="inbox"
         options={{
           title: "Inbox",
-          tabBarIcon: ({ color, size }) => (
-            <Inbox size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View
+              className={`px-4 py-1 rounded-full ${
+                focused ? "bg-secondaryContainer" : ""
+              }`}
+            >
+              <Inbox size={size} color={color} />
+            </View>
           ),
         }}
       />
@@ -61,8 +79,14 @@ export default function TabsLayout() {
         name="me"
         options={{
           title: "Me",
-          tabBarIcon: ({ color, size }) => (
-            <User size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View
+              className={`px-4 py-1 rounded-full ${
+                focused ? "bg-secondaryContainer" : ""
+              }`}
+            >
+              <User size={size} color={color} />
+            </View>
           ),
         }}
       />

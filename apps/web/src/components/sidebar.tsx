@@ -29,21 +29,21 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-[280px] bg-white border-r border-warm-gray-200 flex flex-col z-30">
+    <aside className="fixed left-0 top-0 bottom-0 w-[280px] bg-surface border-r border-outline-variant flex flex-col z-30">
       {/* Logo */}
-      <div className="h-16 flex items-center px-7 border-b border-warm-gray-100">
+      <div className="h-16 flex items-center px-7 border-b border-outline-variant">
         <Link href="/today" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-lg bg-charcoal flex items-center justify-center group-hover:bg-charcoal-400 transition-mercury">
-            <span className="text-cream text-sm font-serif font-bold">M</span>
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center group-hover:shadow-elevation-1 transition-m3">
+            <span className="text-onPrimary text-sm font-bold">M</span>
           </div>
-          <span className="text-lg font-serif font-semibold tracking-tight text-charcoal">
+          <span className="text-lg font-medium tracking-tight text-onSurface">
             Mercury
           </span>
         </Link>
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-mercury">
+      <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-m3">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + '/');
@@ -52,16 +52,16 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-mercury text-sm font-medium transition-mercury',
+                'flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-m3',
                 isActive
-                  ? 'bg-charcoal text-cream shadow-mercury-sm'
-                  : 'text-warm-gray-600 hover:text-charcoal hover:bg-warm-gray-100',
+                  ? 'bg-secondary-container text-onSecondary-container'
+                  : 'text-onSurface-variant hover:text-onSurface hover:bg-surface-containerHigh',
               )}
             >
               <item.icon
                 className={cn(
                   'w-[18px] h-[18px] flex-shrink-0',
-                  isActive ? 'text-cream' : 'text-warm-gray-400',
+                  isActive ? 'text-onSecondary-container' : 'text-onSurface-variant',
                 )}
                 strokeWidth={isActive ? 2 : 1.5}
               />
@@ -71,8 +71,8 @@ export function Sidebar() {
                   className={cn(
                     'ml-auto text-xs px-2 py-0.5 rounded-full font-medium',
                     isActive
-                      ? 'bg-cream/20 text-cream'
-                      : 'bg-sienna/10 text-sienna',
+                      ? 'bg-primary text-onPrimary'
+                      : 'bg-primary-container text-onPrimary-container',
                   )}
                 >
                   3
@@ -84,7 +84,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom Section */}
-      <div className="px-4 py-3 border-t border-warm-gray-100 space-y-1">
+      <div className="px-4 py-3 border-t border-outline-variant space-y-1">
         {bottomItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -92,16 +92,16 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-mercury text-sm font-medium transition-mercury',
+                'flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-m3',
                 isActive
-                  ? 'bg-charcoal text-cream'
-                  : 'text-warm-gray-600 hover:text-charcoal hover:bg-warm-gray-100',
+                  ? 'bg-secondary-container text-onSecondary-container'
+                  : 'text-onSurface-variant hover:text-onSurface hover:bg-surface-containerHigh',
               )}
             >
               <item.icon
                 className={cn(
                   'w-[18px] h-[18px]',
-                  isActive ? 'text-cream' : 'text-warm-gray-400',
+                  isActive ? 'text-onSecondary-container' : 'text-onSurface-variant',
                 )}
                 strokeWidth={1.5}
               />
@@ -112,18 +112,18 @@ export function Sidebar() {
 
         {/* User profile */}
         <div className="flex items-center gap-3 px-3 py-2.5 mt-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sienna-300 to-sienna flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-semibold">JD</span>
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+            <span className="text-onPrimary text-xs font-semibold">JD</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-charcoal truncate">
+            <p className="text-sm font-medium text-onSurface truncate">
               John Doe
             </p>
-            <p className="text-xs text-warm-gray-500 truncate">
+            <p className="text-xs text-onSurface-variant truncate">
               john@company.com
             </p>
           </div>
-          <button className="p-1 text-warm-gray-400 hover:text-charcoal transition-mercury rounded-lg hover:bg-warm-gray-100">
+          <button className="p-1 text-onSurface-variant hover:text-onSurface transition-m3 rounded-lg hover:bg-surface-containerHigh">
             <LogOut className="w-4 h-4" />
           </button>
         </div>

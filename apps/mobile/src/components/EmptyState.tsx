@@ -19,21 +19,21 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <View className="flex-1 items-center justify-center px-8 py-16">
-      <View className="w-16 h-16 bg-warm-100 rounded-full items-center justify-center mb-5">
-        {icon ?? <Inbox size={28} color="#98917F" />}
+      <View className="w-16 h-16 bg-surfaceContainerHigh rounded-full items-center justify-center mb-5">
+        {icon ?? <Inbox size={28} color="#767680" />}
       </View>
-      <Text className="text-charcoal text-lg font-semibold text-center mb-2">
+      <Text className="text-onSurface text-lg font-semibold text-center mb-2">
         {title}
       </Text>
-      <Text className="text-warm-500 text-sm text-center leading-5 mb-6">
+      <Text className="text-onSurfaceVariant text-sm text-center leading-5 mb-6">
         {message}
       </Text>
       {actionLabel && onAction && (
         <Pressable
           onPress={onAction}
-          className="bg-sienna px-6 py-3 rounded-full active:opacity-80"
+          className="bg-primary px-6 py-3 rounded-full active:opacity-80"
         >
-          <Text className="text-white font-semibold text-sm">
+          <Text className="text-onPrimary font-semibold text-sm">
             {actionLabel}
           </Text>
         </Pressable>

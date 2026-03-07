@@ -3,7 +3,7 @@ import { View, Text } from "react-native";
 
 type BadgeVariant =
   | "default"
-  | "sienna"
+  | "primary"
   | "success"
   | "warning"
   | "info"
@@ -16,12 +16,12 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, { bg: string; text: string }> = {
-  default: { bg: "bg-warm-200", text: "text-warm-700" },
-  sienna: { bg: "bg-sienna-100", text: "text-sienna-700" },
+  default: { bg: "bg-surfaceContainerHigh", text: "text-onSurfaceVariant" },
+  primary: { bg: "bg-primaryContainer", text: "text-onPrimaryContainer" },
   success: { bg: "bg-green-100", text: "text-green-800" },
   warning: { bg: "bg-amber-100", text: "text-amber-800" },
   info: { bg: "bg-blue-100", text: "text-blue-800" },
-  muted: { bg: "bg-warm-100", text: "text-warm-500" },
+  muted: { bg: "bg-surfaceContainer", text: "text-onSurfaceVariant" },
 };
 
 export function Badge({ label, variant = "default", size = "sm" }: BadgeProps) {

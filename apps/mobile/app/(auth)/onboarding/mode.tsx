@@ -58,16 +58,16 @@ export default function OnboardingModeScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
         className="px-8"
       >
         <View className="items-center mb-10">
-          <Text className="text-charcoal text-2xl font-serif text-center mb-2">
+          <Text className="text-onBackground text-2xl text-center mb-2 font-semibold">
             How will you use Mercury?
           </Text>
-          <Text className="text-warm-500 text-base text-center leading-6">
+          <Text className="text-onSurfaceVariant text-base text-center leading-6">
             Select one or more. You can always{"\n"}change this later.
           </Text>
         </View>
@@ -79,11 +79,11 @@ export default function OnboardingModeScreen() {
               <Pressable
                 key={mode.id}
                 onPress={() => toggleMode(mode.id)}
-                className={`bg-white rounded-2xl p-5 border-2 active:opacity-90 ${
-                  isSelected ? "border-sienna" : "border-transparent"
+                className={`bg-surfaceContainerLow rounded-2xl p-5 border-2 active:opacity-90 ${
+                  isSelected ? "border-primary" : "border-transparent"
                 }`}
                 style={{
-                  shadowColor: "#1A1815",
+                  shadowColor: "#1B1B1F",
                   shadowOffset: { width: 0, height: 1 },
                   shadowOpacity: 0.05,
                   shadowRadius: 4,
@@ -91,15 +91,15 @@ export default function OnboardingModeScreen() {
                 }}
               >
                 <Text className="text-3xl mb-2">{mode.emoji}</Text>
-                <Text className="text-charcoal text-lg font-semibold mb-1">
+                <Text className="text-onSurface text-lg font-semibold mb-1">
                   {mode.title}
                 </Text>
-                <Text className="text-warm-500 text-sm leading-5">
+                <Text className="text-onSurfaceVariant text-sm leading-5">
                   {mode.description}
                 </Text>
                 {isSelected && (
-                  <View className="absolute top-4 right-4 w-6 h-6 bg-sienna rounded-full items-center justify-center">
-                    <Text className="text-white text-xs font-bold">
+                  <View className="absolute top-4 right-4 w-6 h-6 bg-primary rounded-full items-center justify-center">
+                    <Text className="text-onPrimary text-xs font-bold">
                       {"\u2713"}
                     </Text>
                   </View>
@@ -112,13 +112,13 @@ export default function OnboardingModeScreen() {
         <Pressable
           onPress={handleContinue}
           disabled={selectedModes.length === 0}
-          className={`py-4 rounded-2xl items-center ${
-            selectedModes.length > 0 ? "bg-sienna active:opacity-80" : "bg-warm-200"
+          className={`py-4 rounded-full items-center ${
+            selectedModes.length > 0 ? "bg-primary active:opacity-80" : "bg-surfaceContainerHigh"
           }`}
         >
           <Text
             className={`text-base font-semibold ${
-              selectedModes.length > 0 ? "text-white" : "text-warm-400"
+              selectedModes.length > 0 ? "text-onPrimary" : "text-outline"
             }`}
           >
             Continue

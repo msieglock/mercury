@@ -132,22 +132,22 @@ export default function PeopleScreen() {
   });
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       {/* Header */}
       <View className="px-5 pt-4 pb-2">
-        <Text className="text-charcoal text-3xl font-serif font-bold mb-4">
+        <Text className="text-onBackground text-3xl font-bold mb-4">
           People
         </Text>
 
         {/* Search bar */}
-        <View className="bg-white border border-warm-200 rounded-xl flex-row items-center px-3 py-2.5">
-          <Search size={18} color="#98917F" />
+        <View className="bg-surfaceContainerHigh rounded-full flex-row items-center px-4 py-2.5">
+          <Search size={18} color="#767680" />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search contacts..."
-            placeholderTextColor="#B8B3A7"
-            className="flex-1 ml-2 text-charcoal text-[15px]"
+            placeholderTextColor="#767680"
+            className="flex-1 ml-2 text-onSurface text-[15px]"
           />
         </View>
       </View>
@@ -175,7 +175,7 @@ export default function PeopleScreen() {
           />
         )}
         ItemSeparatorComponent={() => (
-          <View className="h-px bg-warm-100 ml-16" />
+          <View className="h-px bg-outlineVariant ml-16" />
         )}
         ListEmptyComponent={
           <EmptyState
@@ -187,7 +187,7 @@ export default function PeopleScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#D4552A"
+            tintColor="#1A237E"
           />
         }
         contentContainerStyle={{ paddingBottom: 24 }}

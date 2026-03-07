@@ -90,21 +90,21 @@ export default function TodayScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
         className="flex-1"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#D4552A"
+            tintColor="#1A237E"
           />
         }
         contentContainerStyle={{ paddingBottom: 24 }}
       >
         {/* Header */}
         <View className="px-5 pt-4 pb-5">
-          <Text className="text-charcoal text-3xl font-serif font-bold">
+          <Text className="text-onBackground text-3xl font-bold">
             Today
           </Text>
         </View>
@@ -121,7 +121,7 @@ export default function TodayScreen() {
 
         {/* Action Cards */}
         <View className="mt-6">
-          <Text className="px-5 text-warm-500 text-xs font-semibold uppercase tracking-wider mb-3">
+          <Text className="px-5 text-onSurfaceVariant text-xs font-semibold uppercase tracking-wider mb-3">
             Action Items
           </Text>
           {actions.map((action) => (
@@ -141,26 +141,26 @@ export default function TodayScreen() {
         </View>
 
         {/* Auto-actions section */}
-        <View className="mx-5 mt-4 bg-warm-50 rounded-2xl p-4">
-          <Text className="text-warm-600 text-xs font-semibold uppercase tracking-wider mb-2">
+        <View className="mx-5 mt-4 bg-surfaceContainerLow rounded-2xl p-4">
+          <Text className="text-onSurfaceVariant text-xs font-semibold uppercase tracking-wider mb-2">
             Auto-Actions Today
           </Text>
           <View className="gap-2">
             <View className="flex-row items-center gap-2">
               <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <Text className="text-warm-600 text-sm">
+              <Text className="text-onSurfaceVariant text-sm">
                 3 follow-ups sent automatically
               </Text>
             </View>
             <View className="flex-row items-center gap-2">
               <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <Text className="text-warm-600 text-sm">
+              <Text className="text-onSurfaceVariant text-sm">
                 2 meeting notes logged to CRM
               </Text>
             </View>
             <View className="flex-row items-center gap-2">
               <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <Text className="text-warm-600 text-sm">
+              <Text className="text-onSurfaceVariant text-sm">
                 5 contacts enriched with new data
               </Text>
             </View>

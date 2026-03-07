@@ -87,30 +87,30 @@ export function ActionCard({
   return (
     <div
       className={cn(
-        'group relative bg-white rounded-mercury-lg border border-warm-gray-200 p-5 transition-mercury cursor-pointer',
-        'hover:shadow-mercury-md hover:border-warm-gray-300',
-        isSelected && 'ring-2 ring-sienna/30 border-sienna/20 shadow-mercury-md',
-        isOverdue && 'border-l-[3px] border-l-red-400',
+        'group relative bg-surface-containerLow rounded-xl border border-outline-variant p-5 transition-m3 cursor-pointer',
+        'hover:shadow-elevation-2 hover:border-outline',
+        isSelected && 'ring-2 ring-primary/30 border-primary/20 shadow-elevation-2',
+        isOverdue && 'border-l-[3px] border-l-error',
       )}
       tabIndex={0}
     >
       {/* Top row: agent badge + priority + time */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-warm-gray-500 bg-warm-gray-100 px-2 py-1 rounded-full">
-            <Sparkles className="w-3 h-3 text-sienna" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-onSecondary-container bg-secondary-container px-2 py-1 rounded-lg">
+            <Sparkles className="w-3 h-3 text-primary" />
             {agentLabels[agentType] || 'AI'}
           </span>
           <span
             className={cn(
-              'text-xs font-medium px-2 py-0.5 rounded-full capitalize',
+              'text-xs font-medium px-2 py-0.5 rounded-lg capitalize',
               priorityColor(priority),
             )}
           >
             {priority}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-warm-gray-400">
+        <div className="flex items-center gap-1.5 text-xs text-onSurface-variant">
           <Clock className="w-3 h-3" />
           {timeEstimate(type)}
         </div>
@@ -118,17 +118,17 @@ export function ActionCard({
 
       {/* Title + context */}
       <div className="mb-3">
-        <h3 className="text-sm font-semibold text-charcoal leading-snug">
+        <h3 className="text-sm font-medium text-onSurface leading-snug">
           {title}
         </h3>
         {(contactName || companyName) && (
-          <p className="text-xs text-warm-gray-500 mt-1">
+          <p className="text-xs text-onSurface-variant mt-1">
             {contactName}
             {companyName && ` at ${companyName}`}
           </p>
         )}
         {description && (
-          <p className="text-xs text-warm-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-onSurface-variant mt-1.5 line-clamp-2 leading-relaxed">
             {description}
           </p>
         )}
@@ -136,7 +136,7 @@ export function ActionCard({
 
       {/* Overdue warning */}
       {isOverdue && (
-        <div className="flex items-center gap-1.5 text-xs text-red-500 mb-3">
+        <div className="flex items-center gap-1.5 text-xs text-error mb-3">
           <AlertTriangle className="w-3 h-3" />
           Overdue
         </div>
@@ -150,9 +150,9 @@ export function ActionCard({
             onAction?.();
           }}
           className={cn(
-            'inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-mercury transition-mercury',
-            'bg-charcoal text-cream hover:bg-charcoal-400',
-            'group-hover:shadow-mercury-sm',
+            'inline-flex items-center gap-1.5 px-6 h-10 text-sm font-medium rounded-full transition-m3',
+            'bg-primary text-onPrimary hover:shadow-elevation-1',
+            'group-hover:shadow-elevation-1',
           )}
         >
           <Icon className="w-3.5 h-3.5" />
@@ -165,7 +165,7 @@ export function ActionCard({
             e.stopPropagation();
             onSnooze?.();
           }}
-          className="px-3 py-2 text-xs font-medium text-warm-gray-500 hover:text-charcoal hover:bg-warm-gray-100 rounded-mercury transition-mercury"
+          className="px-4 h-8 text-sm font-medium text-onSurface-variant hover:text-onSurface hover:bg-surface-containerHigh rounded-full transition-m3"
         >
           Snooze
         </button>
@@ -175,7 +175,7 @@ export function ActionCard({
             e.stopPropagation();
             onDismiss?.();
           }}
-          className="px-3 py-2 text-xs font-medium text-warm-gray-400 hover:text-warm-gray-600 rounded-mercury transition-mercury opacity-0 group-hover:opacity-100"
+          className="px-4 h-8 text-sm font-medium text-onSurface-variant hover:text-onSurface rounded-full transition-m3 opacity-0 group-hover:opacity-100"
         >
           Dismiss
         </button>

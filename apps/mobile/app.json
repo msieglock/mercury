@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#D4552A"
+      "backgroundColor": "#1A237E"
     },
     "ios": {
       "supportsTablet": true,
@@ -23,7 +23,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#D4552A"
+        "backgroundColor": "#1A237E"
       },
       "package": "com.mercury.app"
     },
@@ -39,7 +39,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#D4552A"
+          "color": "#1A237E"
         }
       ]
     ],

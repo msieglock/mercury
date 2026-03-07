@@ -33,20 +33,20 @@ export function PipelineColumn({
   return (
     <div
       className={cn(
-        'flex w-72 shrink-0 flex-col rounded-2xl border border-[#E5E2DE] bg-[#F5F3F0]',
+        'flex w-72 shrink-0 flex-col rounded-xl border border-outline-variant bg-surface-containerLow',
         className,
       )}
     >
       {/* Column header */}
-      <div className="flex items-center justify-between border-b border-[#E5E2DE] px-4 py-3">
+      <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-[#1A1815]">{title}</h3>
-          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#E5E2DE] px-1.5 text-xs font-medium text-[#6B6560]">
+          <h3 className="text-sm font-semibold text-onSurface">{title}</h3>
+          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary-container px-1.5 text-xs font-medium text-onSecondary-container">
             {count}
           </span>
         </div>
         {totalValue !== undefined && (
-          <span className="text-xs font-medium text-[#6B6560]">
+          <span className="text-xs font-medium text-onSurface-variant">
             {formatCurrency(totalValue)}
           </span>
         )}
