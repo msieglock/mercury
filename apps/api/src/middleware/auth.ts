@@ -12,6 +12,15 @@ export type Bindings = {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REDIRECT_URI: string;
+  MICROSOFT_CLIENT_ID: string;
+  MICROSOFT_CLIENT_SECRET: string;
+  MICROSOFT_REDIRECT_URI: string;
+  LINKEDIN_CLIENT_ID: string;
+  LINKEDIN_CLIENT_SECRET: string;
+  LINKEDIN_REDIRECT_URI: string;
+  TWILIO_ACCOUNT_SID: string;
+  TWILIO_AUTH_TOKEN: string;
+  TWILIO_PHONE_NUMBER: string;
   APOLLO_API_KEY: string;
   ENVIRONMENT: string;
 };

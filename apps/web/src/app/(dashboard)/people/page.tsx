@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -12,8 +12,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn, getInitials, segmentLabel, formatRelativeTime } from '@/lib/utils';
-
-// --- Mock Data ---------------------------------------------------------------
+import { apiClient } from '@/lib/api';
+import { LoadingSkeleton, ApiErrorState } from '@/components/loading-skeleton';
 
 const segments = [
   'all',
@@ -25,7 +25,7 @@ const segments = [
   'needs_followup',
 ];
 
-interface MockContact {
+interface Contact {
   id: string;
   fullName: string;
   title: string;
@@ -38,106 +38,10 @@ interface MockContact {
   email: string;
 }
 
-const mockContacts: MockContact[] = [
-  {
-    id: '1',
-    fullName: 'Sarah Chen',
-    title: 'Partner',
-    company: 'Sequoia Capital',
-    segment: 'hot_lead',
-    outreachPath: 'warm_intro',
-    score: 92,
-    lastContact: new Date(Date.now() - 3600000).toISOString(),
-    nextAction: 'Reply to deck request',
-    email: 'sarah@sequoia.com',
-  },
-  {
-    id: '2',
-    fullName: 'Marcus Johnson',
-    title: 'Head of Partnerships',
-    company: 'Stripe',
-    segment: 'warm',
-    outreachPath: 'direct_inbox',
-    score: 74,
-    lastContact: new Date(Date.now() - 432000000).toISOString(),
-    nextAction: 'Follow up on proposal',
-    email: 'marcus@stripe.com',
-  },
-  {
-    id: '3',
-    fullName: 'Lisa Wang',
-    title: 'VP Engineering',
-    company: 'Figma',
-    segment: 'candidate',
-    outreachPath: 'warm_intro',
-    score: 68,
-    lastContact: new Date(Date.now() - 86400000).toISOString(),
-    nextAction: 'Schedule intro call',
-    email: 'lisa@figma.com',
-  },
-  {
-    id: '4',
-    fullName: 'James Wright',
-    title: 'CEO',
-    company: 'Acme Corp',
-    segment: 'hot_lead',
-    outreachPath: 'direct_inbox',
-    score: 88,
-    lastContact: new Date(Date.now() - 172800000).toISOString(),
-    nextAction: 'Quarterly review meeting',
-    email: 'james@acme.com',
-  },
-  {
-    id: '5',
-    fullName: 'Amy Rodriguez',
-    title: 'VP Sales',
-    company: 'TechStart',
-    segment: 'needs_followup',
-    outreachPath: 'direct_inbox',
-    score: 41,
-    lastContact: new Date(Date.now() - 1036800000).toISOString(),
-    nextAction: 'Re-engagement needed',
-    email: 'amy@techstart.com',
-  },
-  {
-    id: '6',
-    fullName: 'Ryan Kim',
-    title: 'CTO',
-    company: 'DataFlow',
-    segment: 'cold',
-    outreachPath: 'cold_enriched',
-    score: 55,
-    lastContact: new Date(Date.now() - 604800000).toISOString(),
-    nextAction: 'Initial outreach',
-    email: 'ryan@dataflow.io',
-  },
-  {
-    id: '7',
-    fullName: 'David Park',
-    title: 'Co-founder',
-    company: 'NexGen AI',
-    segment: 'connected',
-    outreachPath: 'direct_linkedin',
-    score: 82,
-    lastContact: new Date(Date.now() - 259200000).toISOString(),
-    nextAction: 'Ask for intro to Lisa',
-    email: 'david@nexgen.ai',
-  },
-  {
-    id: '8',
-    fullName: 'Elena Vasquez',
-    title: 'Director of Product',
-    company: 'Notion',
-    segment: 'warm',
-    outreachPath: 'second_degree',
-    score: 63,
-    lastContact: new Date(Date.now() - 518400000).toISOString(),
-    nextAction: 'Send case study',
-    email: 'elena@notion.so',
-  },
-];
-
-const outreachPathIcons: Record<string, { icon: React.ElementType; label: string }> = {
+const outreachPathIcons: Record<
+  string,
+  { icon: React.ElementType; label: string }
+> = {
   direct_inbox: { icon: Mail, label: 'Direct Email' },
   direct_text: { icon: MessageSquare, label: 'Text' },
   direct_linkedin: { icon: Linkedin, label: 'LinkedIn' },
@@ -172,13 +76,63 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-// --- Component ---------------------------------------------------------------
+// --- Component ---
 
 export default function PeoplePage() {
+  const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [activeSegment, setActiveSegment] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredContacts = mockContacts.filter((c) => {
+  useEffect(() => {
+    apiClient('/api/contacts')
+      .then((data) => {
+        const raw = data.contacts || data || [];
+        const mapped: Contact[] = raw.map((c: Record<string, unknown>) => ({
+          id: String(c.id || ''),
+          fullName: String(c.fullName || c.full_name || c.name || 'Unknown'),
+          title: String(c.title || ''),
+          company: String(c.company || c.company_name || ''),
+          segment: String(c.segment || 'cold'),
+          outreachPath: c.outreachPath || c.outreach_path ? String(c.outreachPath || c.outreach_path) : null,
+          score: Number(c.score || c.relationship_score || 0),
+          lastContact: String(c.lastContact || c.last_contact || c.updated_at || new Date().toISOString()),
+          nextAction: String(c.nextAction || c.next_action || ''),
+          email: String(c.email || ''),
+        }));
+        setContacts(mapped);
+      })
+      .catch(() => {
+        setError(true);
+        setContacts([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="h-11 bg-surface-containerHigh rounded-full animate-pulse" />
+        <div className="flex gap-2">
+          {segments.slice(0, 5).map((_, i) => (
+            <div key={i} className="h-8 w-20 bg-surface-containerHigh rounded-lg animate-pulse" />
+          ))}
+        </div>
+        <LoadingSkeleton variant="table" rows={6} />
+      </div>
+    );
+  }
+
+  if (error && (!contacts || contacts.length === 0)) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <ApiErrorState />
+      </div>
+    );
+  }
+
+  const filteredContacts = (contacts || []).filter((c) => {
     const matchesSegment =
       activeSegment === 'all' || c.segment === activeSegment;
     const matchesSearch =
@@ -286,12 +240,14 @@ export default function PeoplePage() {
 
                 {/* Last Contact */}
                 <div className="text-xs text-onSurface-variant">
-                  {formatRelativeTime(contact.lastContact)}
+                  {contact.lastContact
+                    ? formatRelativeTime(contact.lastContact)
+                    : '--'}
                 </div>
 
                 {/* Next Action */}
                 <div className="text-xs text-onSurface-variant truncate">
-                  {contact.nextAction}
+                  {contact.nextAction || '--'}
                 </div>
 
                 {/* Chevron */}

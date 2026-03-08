@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
-import { getGmailClient, fetchNewEmails, fetchSentEmails } from '../lib/gmail.js';
+import { getGmailClient, fetchNewEmails, fetchSentEmails, fetchInboxEmails } from '../lib/gmail.js';
 import { getCalendarClient, fetchEvents } from '../lib/calendar.js';
 import { enrichPerson } from '../lib/apollo.js';
 import { aiGateway } from '../lib/ai-gateway.js';
@@ -42,7 +42,7 @@ sync.post('/email', async (c) => {
     // Fetch user's Google linked account
     const linkedAccount = await db
       .prepare(
-        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ?'
       )
       .bind(userId, 'google')
       .first();
@@ -59,167 +59,132 @@ sync.post('/email', async (c) => {
 
     const since = parsed.data.since
       ? new Date(parsed.data.since)
-      : new Date(Date.now() - 24 * 60 * 60 * 1000); // Default: last 24 hours
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
 
     const maxResults = parsed.data.max_results ?? 50;
 
-    // Fetch new emails
-    const newEmails = await fetchNewEmails(gmailClient, since, maxResults);
-    const sentEmails = await fetchSentEmails(gmailClient, since, maxResults);
+    // Fetch inbox + sent emails
+    const inboxEmails = await fetchInboxEmails(gmailClient, since, maxResults);
+    const sentEmails = await fetchSentEmails(gmailClient, since, Math.min(maxResults, 25));
 
-    let actionsCreated = 0;
     let interactionsCreated = 0;
+    let contactsCreated = 0;
 
-    // Process new incoming emails
-    for (const email of newEmails) {
-      // Find or create contact
-      const contact = await db
+    // Helper: find or create contact by email
+    async function findOrCreateContact(email: string, name: string | null): Promise<string> {
+      const existing = await db
         .prepare('SELECT id FROM contacts WHERE user_id = ? AND email = ?')
-        .bind(userId, email.from)
+        .bind(userId, email)
         .first<{ id: string }>();
 
-      const contactId = contact?.id ?? null;
+      if (existing) return existing.id;
 
-      // Create interaction record
-      const interactionResult = await db
+      // Auto-create contact
+      const contactId = crypto.randomUUID();
+      const nameParts = (name ?? email.split('@')[0]).split(' ');
+      const firstName = nameParts[0] ?? '';
+      const lastName = nameParts.slice(1).join(' ') || null;
+      const fullName = name ?? email.split('@')[0];
+
+      await db
         .prepare(
-          `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO contacts (id, user_id, email, full_name, first_name, last_name, segment, outreach_path, relationship_score, tags, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
-          crypto.randomUUID(),
-          userId,
-          contactId,
-          'email_received',
-          email.subject,
-          email.body.substring(0, 5000),
-          'email',
-          JSON.stringify({
-            gmail_id: email.id,
-            thread_id: email.threadId,
-            from: email.from,
-            from_name: email.fromName,
-          }),
-          email.date.toISOString(),
-          new Date().toISOString()
+          contactId, userId, email, fullName, firstName, lastName,
+          'keep_warm', 'inbound', 0.1, '["auto_created"]',
+          new Date().toISOString(), new Date().toISOString()
         )
         .run();
 
-      if (interactionResult.success) interactionsCreated++;
-
-      // Classify with Haiku for fast triage
-      if (contactId) {
-        try {
-          const classification = await aiGateway({
-            model: 'haiku',
-            userId,
-            agentType: 'orchestrator',
-            db,
-            apiKey: c.env.ANTHROPIC_API_KEY,
-            messages: [
-              {
-                role: 'user',
-                content: `Classify this email and respond with JSON only:
-Subject: ${email.subject}
-From: ${email.fromName ?? email.from}
-Body: ${email.body.substring(0, 2000)}
-
-Respond with JSON: { "intent": "interested|question|objection|not_now|referral|ooo", "sentiment": "positive|neutral|negative", "urgency": "immediate|today|this_week|no_rush", "suggested_action": "follow_up|reply_needed|warm_intro|meeting_prep|new_prospect|deal_cold|candidate_responded|log_notes|null", "summary": "one sentence summary" }`,
-              },
-            ],
-          });
-
-          const result = JSON.parse(classification.content);
-
-          // Create action card if suggested
-          if (result.suggested_action) {
-            const actionResult = await db
-              .prepare(
-                `INSERT INTO actions (id, user_id, contact_id, type, title, description, priority, status, agent_type, metadata, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-              )
-              .bind(
-                crypto.randomUUID(),
-                userId,
-                contactId,
-                result.suggested_action,
-                `${result.suggested_action === 'reply_needed' ? 'Reply to' : 'Follow up with'}: ${email.fromName ?? email.from}`,
-                result.summary,
-                result.urgency === 'immediate'
-                  ? 'urgent'
-                  : result.urgency === 'today'
-                    ? 'high'
-                    : result.urgency === 'this_week'
-                      ? 'medium'
-                      : 'low',
-                'pending',
-                'orchestrator',
-                JSON.stringify({
-                  email_id: email.id,
-                  thread_id: email.threadId,
-                  classification: result,
-                }),
-                new Date().toISOString(),
-                new Date().toISOString()
-              )
-              .run();
-            if (actionResult.success) actionsCreated++;
-          }
-        } catch (classifyError) {
-          console.error('[sync/email] Classification failed for email:', email.id, classifyError);
-        }
-      }
+      contactsCreated++;
+      return contactId;
     }
 
-    // Process sent emails as interactions
+    // Process inbox emails
+    for (const email of inboxEmails) {
+      // Skip duplicates by checking message_id
+      const existing = await db
+        .prepare('SELECT id FROM interactions WHERE message_id = ?')
+        .bind(email.id)
+        .first();
+      if (existing) continue;
+
+      const contactId = await findOrCreateContact(email.from, email.fromName);
+
+      await db
+        .prepare(
+          `INSERT INTO interactions (id, user_id, contact_id, channel, direction, subject, body_snippet, thread_id, message_id, metadata, occurred_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(), userId, contactId,
+          'email', 'inbound',
+          email.subject, email.body.substring(0, 500),
+          email.threadId ?? null, email.id,
+          JSON.stringify({
+            gmail_id: email.id,
+            from: email.from,
+            from_name: email.fromName,
+            is_read: email.isRead,
+          }),
+          email.date.toISOString(), new Date().toISOString()
+        )
+        .run();
+
+      interactionsCreated++;
+
+      // Update contact last interaction
+      await db
+        .prepare('UPDATE contacts SET last_interaction_at = MAX(COALESCE(last_interaction_at, ""), ?) WHERE id = ?')
+        .bind(email.date.toISOString(), contactId)
+        .run();
+    }
+
+    // Process sent emails
     for (const email of sentEmails) {
       for (const recipient of email.to) {
-        const contact = await db
-          .prepare('SELECT id FROM contacts WHERE user_id = ? AND email = ?')
-          .bind(userId, recipient)
-          .first<{ id: string }>();
+        const msgId = `${email.id}_to_${recipient}`;
+        const existing = await db
+          .prepare('SELECT id FROM interactions WHERE message_id = ?')
+          .bind(msgId)
+          .first();
+        if (existing) continue;
 
-        if (contact) {
-          const interactionResult = await db
-            .prepare(
-              `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            )
-            .bind(
-              crypto.randomUUID(),
-              userId,
-              contact.id,
-              'email_sent',
-              email.subject,
-              email.body.substring(0, 5000),
-              'email',
-              JSON.stringify({
-                gmail_id: email.id,
-                thread_id: email.threadId,
-              }),
-              email.date.toISOString(),
-              new Date().toISOString()
-            )
-            .run();
+        const contactId = await findOrCreateContact(recipient, null);
 
-          if (interactionResult.success) interactionsCreated++;
+        await db
+          .prepare(
+            `INSERT INTO interactions (id, user_id, contact_id, channel, direction, subject, body_snippet, thread_id, message_id, metadata, occurred_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            crypto.randomUUID(), userId, contactId,
+            'email', 'outbound',
+            email.subject, email.body.substring(0, 500),
+            email.threadId ?? null, msgId,
+            JSON.stringify({ gmail_id: email.id }),
+            email.date.toISOString(), new Date().toISOString()
+          )
+          .run();
 
-          // Update last interaction
-          await db
-            .prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
-            .bind(email.date.toISOString(), contact.id)
-            .run();
-        }
+        interactionsCreated++;
+
+        await db
+          .prepare('UPDATE contacts SET last_interaction_at = MAX(COALESCE(last_interaction_at, ""), ?) WHERE id = ?')
+          .bind(email.date.toISOString(), contactId)
+          .run();
       }
     }
 
     return c.json({
       success: true,
-      emails_fetched: newEmails.length + sentEmails.length,
-      incoming: newEmails.length,
+      emails_fetched: inboxEmails.length + sentEmails.length,
+      incoming: inboxEmails.length,
       sent: sentEmails.length,
       interactions_created: interactionsCreated,
-      actions_created: actionsCreated,
+      contacts_created: contactsCreated,
     });
   } catch (error) {
     console.error('[sync/email] Email sync failed:', error);
@@ -244,7 +209,7 @@ sync.post('/calendar', async (c) => {
     // Fetch user's Google linked account
     const linkedAccount = await db
       .prepare(
-        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ?'
       )
       .bind(userId, 'google')
       .first();
@@ -296,19 +261,18 @@ sync.post('/calendar', async (c) => {
 
         const actionResult = await db
           .prepare(
-            `INSERT INTO actions (id, user_id, contact_id, type, title, description, priority, status, agent_type, due_at, metadata, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO actions (id, user_id, contact_id, type, title, body, priority, status, due_at, metadata, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .bind(
             crypto.randomUUID(),
             userId,
             primaryContact.id,
-            'meeting_prep',
+            'prep_brief',
             `Prep for: ${event.summary}`,
             `Meeting with ${matchedContacts.results.map((c) => c.full_name).join(', ')} on ${event.start.toLocaleDateString()}`,
-            'medium',
+            50,
             'pending',
-            'orchestrator',
             new Date(event.start.getTime() - 30 * 60 * 1000).toISOString(),
             JSON.stringify({
               event_id: event.id,
@@ -413,7 +377,7 @@ sync.post('/contacts', async (c) => {
               if (existingCompany) {
                 await db
                   .prepare(
-                    `UPDATE companies SET name = ?, industry = ?, size = ?, logo_url = ?, linkedin_url = ?, description = ?, enrichment_data = ?, updated_at = ?
+                    `UPDATE companies SET name = ?, industry = ?, size = ?, logo_url = ?, linkedin_url = ?, enrichment_data = ?, updated_at = ?
                      WHERE id = ?`
                   )
                   .bind(
@@ -422,7 +386,6 @@ sync.post('/contacts', async (c) => {
                     org.estimated_num_employees?.toString() ?? null,
                     org.logo_url,
                     org.linkedin_url,
-                    org.short_description,
                     JSON.stringify(org),
                     new Date().toISOString(),
                     existingCompany.id
@@ -438,8 +401,8 @@ sync.post('/contacts', async (c) => {
                 const companyId = crypto.randomUUID();
                 await db
                   .prepare(
-                    `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, description, enrichment_data, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, enrichment_data, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                   )
                   .bind(
                     companyId,
@@ -450,7 +413,6 @@ sync.post('/contacts', async (c) => {
                     org.estimated_num_employees?.toString() ?? null,
                     org.logo_url,
                     org.linkedin_url,
-                    org.short_description,
                     JSON.stringify(org),
                     new Date().toISOString(),
                     new Date().toISOString()

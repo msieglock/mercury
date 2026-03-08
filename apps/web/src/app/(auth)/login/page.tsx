@@ -1,9 +1,19 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787';
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const handleLogin = (provider: 'google' | 'microsoft') => {
+    // Dev mode: skip OAuth and go straight to dashboard
+    if (!process.env.NEXT_PUBLIC_API_URL) {
+      document.cookie = 'mercury_session=dev-session; path=/';
+      router.push('/today');
+      return;
+    }
     window.location.href = `${API_URL}/auth/${provider}`;
   };
 

@@ -10,18 +10,10 @@ const contacts = new Hono<AuthEnv>();
 
 const listContactsSchema = z.object({
   segment: z
-    .enum(['hot_lead', 'warm', 'cold', 'candidate', 'customer', 'connected', 'needs_followup'])
+    .enum(['inner_circle', 'active_deal', 'keep_warm', 'dormant'])
     .optional(),
   outreachPath: z
-    .enum([
-      'direct_inbox',
-      'direct_text',
-      'direct_linkedin',
-      'warm_intro',
-      'second_degree',
-      'cold_enriched',
-      'cold_research',
-    ])
+    .enum(['inbound', 'warm_intro', 'cold_outbound', 'event'])
     .optional(),
   search: z.string().optional(),
   sort: z.enum(['name', 'score', 'last_interaction', 'created']).optional(),
@@ -331,8 +323,8 @@ contacts.post('/:id/enrich', async (c) => {
           companyId = crypto.randomUUID();
           await db
             .prepare(
-              `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, description, enrichment_data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO companies (id, user_id, name, domain, industry, size, logo_url, linkedin_url, enrichment_data, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
             .bind(
               companyId,
@@ -343,7 +335,6 @@ contacts.post('/:id/enrich', async (c) => {
               org.estimated_num_employees?.toString() ?? null,
               org.logo_url,
               org.linkedin_url,
-              org.short_description,
               JSON.stringify(org),
               new Date().toISOString(),
               new Date().toISOString()

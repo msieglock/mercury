@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { CommandPalette } from '@/components/command-palette';
+import { SidebarProvider } from '@/components/sidebar-provider';
+import { DashboardContent } from '@/components/dashboard-content';
 
 export default function DashboardLayout({
   children,
@@ -13,16 +15,18 @@ export default function DashboardLayout({
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   return (
-    <div className="min-h-full bg-background">
-      <Sidebar />
-      <div className="pl-[280px]">
-        <Header onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
-        <main className="p-8">{children}</main>
+    <SidebarProvider>
+      <div className="min-h-full bg-background">
+        <Sidebar />
+        <DashboardContent>
+          <Header onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+          <main className="p-8">{children}</main>
+        </DashboardContent>
       </div>
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
       />
-    </div>
+    </SidebarProvider>
   );
 }

@@ -17,7 +17,6 @@ const updatePipelineItemSchema = z.object({
   stage: z.string().optional(),
   position: z.number().int().min(0).optional(),
   value: z.number().optional(),
-  expected_close_at: z.string().datetime().optional(),
   notes: z.string().optional(),
 });
 
@@ -63,19 +62,12 @@ pipelines.post('/', async (c) => {
   try {
     const db = c.env.DB;
 
-    // Check if user already has a default pipeline of this type
-    const existingDefault = await db
-      .prepare('SELECT id FROM pipelines WHERE user_id = ? AND type = ? AND is_default = 1')
-      .bind(userId, type)
-      .first();
-
     const pipelineId = crypto.randomUUID();
-    const isDefault = !existingDefault ? 1 : 0;
 
     await db
       .prepare(
-        `INSERT INTO pipelines (id, user_id, name, type, stages, is_default, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO pipelines (id, user_id, name, kind, stages, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         pipelineId,
@@ -83,7 +75,6 @@ pipelines.post('/', async (c) => {
         name,
         type,
         JSON.stringify(stages),
-        isDefault,
         new Date().toISOString(),
         new Date().toISOString()
       )
@@ -248,10 +239,6 @@ pipelines.patch('/items/:id', async (c) => {
     if (parsed.data.value !== undefined) {
       setClauses.push('value = ?');
       values.push(parsed.data.value);
-    }
-    if (parsed.data.expected_close_at !== undefined) {
-      setClauses.push('expected_close_at = ?');
-      values.push(parsed.data.expected_close_at);
     }
     if (parsed.data.notes !== undefined) {
       setClauses.push('notes = ?');

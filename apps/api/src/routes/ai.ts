@@ -5,8 +5,14 @@ import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
 import { aiGateway, aiGatewayStream } from '../lib/ai-gateway.js';
 import { enrichPerson, enrichOrganization, searchPeople } from '../lib/apollo.js';
+import { getGmailClient, fetchSentEmails } from '../lib/gmail.js';
 
 const ai = new Hono<AuthEnv>();
+
+/** Strip markdown code fences (```json ... ```) from AI responses */
+function stripCodeFences(text: string): string {
+  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+}
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -78,9 +84,9 @@ ai.post('/compose', async (c) => {
 
     const interactions = interactionsResult.results;
 
-    // Fetch user's style fingerprint
+    // Fetch user's style fingerprint + ICP
     const user = await db
-      .prepare('SELECT style_fingerprint, mode, full_name FROM users WHERE id = ?')
+      .prepare('SELECT style_fingerprint, mode, full_name, icp FROM users WHERE id = ?')
       .bind(userId)
       .first();
 
@@ -93,7 +99,7 @@ ai.post('/compose', async (c) => {
 
     // Build the compose prompt
     const interactionHistory = (interactions ?? [])
-      .map((i) => `[${i.type}] ${i.occurred_at}: ${i.subject ?? ''} - ${((i.body as string) ?? '').substring(0, 300)}`)
+      .map((i) => `[${i.channel}/${i.direction}] ${i.occurred_at}: ${i.subject ?? ''} - ${((i.body_snippet as string) ?? '').substring(0, 300)}`)
       .join('\n');
 
     const companyContext = company
@@ -110,7 +116,10 @@ ai.post('/compose', async (c) => {
 - Paragraph style: ${styleFingerprint.paragraph_structure}`
       : 'Use a professional, conversational tone.';
 
+    const icpContext = user?.icp ? `\nIdeal Customer Profile: ${user.icp}` : '';
+
     const systemPrompt = `You are Mercury's Composer Agent. You draft ${channel === 'email' ? 'emails' : 'text messages'} that sound exactly like the user.
+${icpContext}
 
 ${styleInstructions}
 
@@ -177,10 +186,10 @@ Respond with JSON: { "subject": "email subject line or null for SMS", "body": "t
 
     let draft: { subject: string | null; body: string };
     try {
-      draft = JSON.parse(response.content);
+      draft = JSON.parse(stripCodeFences(response.content));
     } catch {
       // If AI didn't return valid JSON, treat the whole response as the body
-      draft = { subject: null, body: response.content };
+      draft = { subject: null, body: stripCodeFences(response.content) };
     }
 
     return c.json({
@@ -234,7 +243,7 @@ Respond with JSON: {
 
     let classification: { intent: string; sentiment: string; suggestedAction: string | null };
     try {
-      classification = JSON.parse(response.content);
+      classification = JSON.parse(stripCodeFences(response.content));
     } catch {
       return c.json({ error: 'AI returned invalid classification format' }, 500);
     }
@@ -345,7 +354,7 @@ Respond with JSON: {
 
     let brief: Record<string, unknown>;
     try {
-      brief = JSON.parse(response.content);
+      brief = JSON.parse(stripCodeFences(response.content));
     } catch {
       brief = { summary: response.content };
     }
@@ -468,7 +477,7 @@ Respond with JSON: {
 
     let analysis: Record<string, unknown>;
     try {
-      analysis = JSON.parse(response.content);
+      analysis = JSON.parse(stripCodeFences(response.content));
     } catch {
       analysis = { summary: response.content };
     }
@@ -482,6 +491,277 @@ Respond with JSON: {
   } catch (error) {
     console.error('[ai/analyze] Analysis failed:', error);
     return c.json({ error: 'Analysis failed' }, 500);
+  }
+});
+
+// ─── POST /ai/analyze-style ─────────────────────────────────────────────────
+
+ai.post('/analyze-style', async (c) => {
+  const userId = getUserId(c);
+
+  try {
+    const db = c.env.DB;
+
+    // Get linked Google account
+    const linkedAccount = await db
+      .prepare('SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ?')
+      .bind(userId, 'google')
+      .first();
+
+    if (!linkedAccount) {
+      return c.json({ error: 'No Google account linked' }, 400);
+    }
+
+    const gmailClient = getGmailClient(
+      c.env,
+      linkedAccount.access_token as string,
+      (linkedAccount.refresh_token as string) ?? undefined
+    );
+
+    // Fetch sent emails from last 90 days
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const sentEmails = await fetchSentEmails(gmailClient, since, 200);
+
+    if (sentEmails.length < 5) {
+      return c.json({ error: 'Not enough sent emails to analyze style (need at least 5)' }, 400);
+    }
+
+    // Extract body text from each email
+    const emailBodies = sentEmails.map((e) => e.body).filter((b) => b && b.length > 20);
+
+    const emailsText = emailBodies
+      .slice(0, 200)
+      .map((email, i) => `--- Email ${i + 1} ---\n${email}`)
+      .join('\n\n');
+
+    const userPrompt = `Analyze the following ${emailBodies.length} sent emails and extract a detailed writing style fingerprint.
+
+Return a JSON object with EXACTLY these fields:
+
+{
+  "greeting_style": "The most common greeting pattern (e.g., 'Hey {name},' or 'Hi {name},')",
+  "sign_off_style": "The most common sign-off (e.g., 'Best,' or 'Thanks,')",
+  "avg_sentence_length": <number of words per sentence on average>,
+  "vocabulary_level": "casual" | "professional" | "formal" | "academic",
+  "emoji_usage": "never" | "rare" | "occasional" | "frequent",
+  "punctuation_habits": {
+    "uses_exclamations": <boolean>,
+    "uses_ellipsis": <boolean>,
+    "uses_dashes": <boolean>,
+    "oxford_comma": <boolean>
+  },
+  "tone_markers": {
+    "formality": <1-10>,
+    "warmth": <1-10>,
+    "humor": <1-10>,
+    "directness": <1-10>,
+    "confidence": <1-10>
+  },
+  "common_phrases": ["list of frequently used phrases or expressions"],
+  "transition_words": ["list of commonly used transition words"],
+  "paragraph_structure": "short" | "medium" | "long",
+  "question_frequency": "never" | "rare" | "sometimes" | "often",
+  "personal_anecdote_frequency": "never" | "rare" | "sometimes" | "often",
+  "call_to_action_style": "Description of how they typically ask for action",
+  "subject_line_style": "Description of their subject line patterns"
+}
+
+Focus on patterns that appear consistently across multiple emails, not one-off occurrences.
+
+EMAILS TO ANALYZE:
+
+${emailsText}`;
+
+    const response = await aiGateway({
+      model: 'sonnet',
+      userId,
+      agentType: 'composer',
+      db,
+      apiKey: c.env.ANTHROPIC_API_KEY,
+      maxTokens: 4096,
+      messages: [{ role: 'user', content: userPrompt }],
+      system:
+        'You are a linguistic analyst specializing in personal writing style analysis. ' +
+        'Analyze the provided emails and extract a detailed style fingerprint. ' +
+        'Return ONLY valid JSON matching the StyleFingerprint schema. No markdown, no explanation.',
+    });
+
+    let fingerprint: Record<string, unknown>;
+    try {
+      fingerprint = JSON.parse(stripCodeFences(response.content));
+    } catch {
+      return c.json({ error: 'AI returned invalid style fingerprint format' }, 500);
+    }
+
+    // Save to users table
+    await db
+      .prepare('UPDATE users SET style_fingerprint = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(fingerprint), new Date().toISOString(), userId)
+      .run();
+
+    return c.json({
+      fingerprint,
+      emails_analyzed: emailBodies.length,
+      model: response.model,
+      tokens_used: response.tokensUsed,
+    });
+  } catch (error) {
+    console.error('[ai/analyze-style] Style analysis failed:', error);
+    return c.json({ error: 'Style analysis failed' }, 500);
+  }
+});
+
+// ─── POST /ai/update-style ─────────────────────────────────────────────────
+
+const updateStyleSchema = z.object({
+  originalDraft: z.string().min(1),
+  editedVersion: z.string().min(1),
+});
+
+ai.post('/update-style', async (c) => {
+  const userId = getUserId(c);
+  const body = await c.req.json();
+  const parsed = updateStyleSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const { originalDraft, editedVersion } = parsed.data;
+
+  try {
+    const db = c.env.DB;
+
+    // Read current fingerprint
+    const user = await db
+      .prepare('SELECT style_fingerprint FROM users WHERE id = ?')
+      .bind(userId)
+      .first();
+
+    if (!user?.style_fingerprint) {
+      return c.json({ error: 'No style fingerprint found. Run analyze-style first.' }, 400);
+    }
+
+    const current = typeof user.style_fingerprint === 'string'
+      ? JSON.parse(user.style_fingerprint as string)
+      : user.style_fingerprint;
+
+    // Deterministic fingerprint update (ported from ToneEngine.updateFingerprint)
+    const updated = structuredClone(current);
+
+    // Analyze structural changes
+    const originalSentences = originalDraft.split(/[.!?]+/).filter(Boolean);
+    const editedSentences = editedVersion.split(/[.!?]+/).filter(Boolean);
+
+    // Update average sentence length
+    const editedAvgLength =
+      editedSentences.reduce((sum: number, s: string) => sum + s.trim().split(/\s+/).length, 0) /
+      Math.max(editedSentences.length, 1);
+    updated.avg_sentence_length = Math.round(
+      ((current.avg_sentence_length ?? 15) * 0.8 + editedAvgLength * 0.2) * 10,
+    ) / 10;
+
+    // Detect greeting changes
+    const editedFirstLine = editedVersion.split('\n')[0]?.trim() ?? '';
+    if (editedFirstLine !== originalDraft.split('\n')[0]?.trim()) {
+      updated.greeting_style = editedFirstLine;
+    }
+
+    // Detect sign-off changes
+    const editedLines = editedVersion.trim().split('\n');
+    const editedLastLine = editedLines[editedLines.length - 1]?.trim() ?? '';
+    const originalLines = originalDraft.trim().split('\n');
+    const originalLastLine = originalLines[originalLines.length - 1]?.trim() ?? '';
+    if (editedLastLine !== originalLastLine) {
+      updated.sign_off_style = editedLastLine;
+    }
+
+    // Detect emoji usage changes
+    const originalEmojis = (originalDraft.match(/[\p{Emoji_Presentation}]/gu) ?? []).length;
+    const editedEmojis = (editedVersion.match(/[\p{Emoji_Presentation}]/gu) ?? []).length;
+    const emojiLevels = ['never', 'rare', 'occasional', 'frequent'];
+    if (editedEmojis > originalEmojis) {
+      const currentIndex = emojiLevels.indexOf(current.emoji_usage ?? 'never');
+      if (currentIndex < emojiLevels.length - 1) {
+        updated.emoji_usage = emojiLevels[currentIndex + 1];
+      }
+    } else if (editedEmojis < originalEmojis && editedEmojis === 0) {
+      const currentIndex = emojiLevels.indexOf(current.emoji_usage ?? 'never');
+      if (currentIndex > 0) {
+        updated.emoji_usage = emojiLevels[currentIndex - 1];
+      }
+    }
+
+    // Detect punctuation changes
+    updated.punctuation_habits = {
+      ...(current.punctuation_habits ?? {}),
+      uses_exclamations: /!/.test(editedVersion),
+      uses_ellipsis: /\.{3}|…/.test(editedVersion),
+      uses_dashes: /[—–-]{2,}|—/.test(editedVersion),
+    };
+
+    // Detect formality shift
+    const casualIndicators = /\b(hey|yeah|gonna|wanna|kinda|btw|fyi|lol)\b/gi;
+    const formalIndicators = /\b(regarding|pursuant|accordingly|furthermore|hereby)\b/gi;
+    const editedCasual = (editedVersion.match(casualIndicators) ?? []).length;
+    const editedFormal = (editedVersion.match(formalIndicators) ?? []).length;
+    const originalCasual = (originalDraft.match(casualIndicators) ?? []).length;
+    const originalFormal = (originalDraft.match(formalIndicators) ?? []).length;
+
+    if (!updated.tone_markers) updated.tone_markers = {};
+    if (editedCasual > originalCasual) {
+      updated.tone_markers.formality = Math.max(1, (current.tone_markers?.formality ?? 5) - 0.5);
+    } else if (editedFormal > originalFormal) {
+      updated.tone_markers.formality = Math.min(10, (current.tone_markers?.formality ?? 5) + 0.5);
+    }
+
+    // Detect paragraph structure changes
+    const editedParagraphs = editedVersion.split(/\n\s*\n/).filter(Boolean);
+    const avgParagraphLength =
+      editedParagraphs.reduce((sum: number, p: string) => sum + p.split(/\s+/).length, 0) /
+      Math.max(editedParagraphs.length, 1);
+    if (avgParagraphLength < 30) {
+      updated.paragraph_structure = 'short';
+    } else if (avgParagraphLength < 60) {
+      updated.paragraph_structure = 'medium';
+    } else {
+      updated.paragraph_structure = 'long';
+    }
+
+    // Shorter edits suggest preference for directness
+    if (editedVersion.length < originalDraft.length * 0.8) {
+      updated.tone_markers.directness = Math.min(10, (current.tone_markers?.directness ?? 5) + 0.5);
+    } else if (editedVersion.length > originalDraft.length * 1.2) {
+      updated.tone_markers.directness = Math.max(1, (current.tone_markers?.directness ?? 5) - 0.3);
+    }
+
+    // Save updated fingerprint
+    await db
+      .prepare('UPDATE users SET style_fingerprint = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(updated), new Date().toISOString(), userId)
+      .run();
+
+    // Log the style edit for future analysis
+    await db
+      .prepare(
+        `INSERT INTO style_edits (id, user_id, original_text, edited_text, edit_type, context, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        originalDraft.substring(0, 5000),
+        editedVersion.substring(0, 5000),
+        'tone',
+        JSON.stringify({ source: 'ai_draft_edit' }),
+        new Date().toISOString()
+      )
+      .run();
+
+    return c.json({ fingerprint: updated });
+  } catch (error) {
+    console.error('[ai/update-style] Style update failed:', error);
+    return c.json({ error: 'Style update failed' }, 500);
   }
 });
 

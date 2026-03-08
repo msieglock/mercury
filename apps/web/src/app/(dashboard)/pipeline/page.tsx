@@ -1,141 +1,138 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, Plus, Filter } from 'lucide-react';
 import { PipelineBoard } from '@/components/pipeline-board';
 import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
+import { LoadingSkeleton, ApiErrorState } from '@/components/loading-skeleton';
 
-// --- Mock Data ---------------------------------------------------------------
+interface Pipeline {
+  id: string;
+  name: string;
+  type: string;
+}
 
-const pipelines = [
-  { id: '1', name: 'Sales Pipeline', type: 'sales' },
-  { id: '2', name: 'Recruiting Pipeline', type: 'recruiting' },
-];
+interface PipelineColumn {
+  id: string;
+  name: string;
+  cards: {
+    id: string;
+    contactName: string;
+    company: string;
+    value: number;
+    score: number;
+    daysInStage: number;
+  }[];
+}
 
-const mockColumns = [
-  {
-    id: 'discovery',
-    name: 'Discovery',
-    cards: [
-      {
-        id: '1',
-        contactName: 'Ryan Kim',
-        company: 'DataFlow',
-        value: 45000,
-        score: 55,
-        daysInStage: 3,
-      },
-      {
-        id: '2',
-        contactName: 'Elena Vasquez',
-        company: 'Notion',
-        value: 80000,
-        score: 63,
-        daysInStage: 7,
-      },
-      {
-        id: '3',
-        contactName: 'Tom Anderson',
-        company: 'Vercel',
-        value: 35000,
-        score: 48,
-        daysInStage: 2,
-      },
-    ],
-  },
-  {
-    id: 'qualified',
-    name: 'Qualified',
-    cards: [
-      {
-        id: '4',
-        contactName: 'Marcus Johnson',
-        company: 'Stripe',
-        value: 120000,
-        score: 74,
-        daysInStage: 12,
-      },
-      {
-        id: '5',
-        contactName: 'Lisa Wang',
-        company: 'Figma',
-        value: 90000,
-        score: 68,
-        daysInStage: 5,
-      },
-    ],
-  },
-  {
-    id: 'proposal',
-    name: 'Proposal',
-    cards: [
-      {
-        id: '6',
-        contactName: 'Sarah Chen',
-        company: 'Sequoia Capital',
-        value: 500000,
-        score: 92,
-        daysInStage: 4,
-      },
-      {
-        id: '7',
-        contactName: 'David Park',
-        company: 'NexGen AI',
-        value: 150000,
-        score: 82,
-        daysInStage: 8,
-      },
-    ],
-  },
-  {
-    id: 'negotiation',
-    name: 'Negotiation',
-    cards: [
-      {
-        id: '8',
-        contactName: 'James Wright',
-        company: 'Acme Corp',
-        value: 200000,
-        score: 88,
-        daysInStage: 15,
-      },
-    ],
-  },
-  {
-    id: 'closed_won',
-    name: 'Closed Won',
-    cards: [
-      {
-        id: '9',
-        contactName: 'Amy Rodriguez',
-        company: 'TechStart',
-        value: 75000,
-        score: 95,
-        daysInStage: 0,
-      },
-      {
-        id: '10',
-        contactName: 'Kevin Chang',
-        company: 'Amplitude',
-        value: 110000,
-        score: 98,
-        daysInStage: 0,
-      },
-    ],
-  },
-];
-
-// --- Component ---------------------------------------------------------------
+// --- Component ---
 
 export default function PipelinePage() {
-  const [selectedPipeline, setSelectedPipeline] = useState(pipelines[0]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
+  const [columns, setColumns] = useState<PipelineColumn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const totalValue = mockColumns.reduce(
+  // Fetch pipelines
+  useEffect(() => {
+    apiClient('/api/pipelines')
+      .then((data) => {
+        const raw = data.pipelines || data || [];
+        const mapped: Pipeline[] = raw.map((p: Record<string, unknown>) => ({
+          id: String(p.id || ''),
+          name: String(p.name || ''),
+          type: String(p.type || 'sales'),
+        }));
+        setPipelines(mapped);
+        if (mapped.length > 0) {
+          setSelectedPipeline(mapped[0]);
+        }
+      })
+      .catch(() => {
+        setError(true);
+        setPipelines([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Fetch pipeline items when selected pipeline changes
+  useEffect(() => {
+    if (!selectedPipeline) return;
+
+    apiClient(`/api/pipelines/${selectedPipeline.id}/items`)
+      .then((data) => {
+        const items = data.items || data || [];
+        // Group items by stage
+        const stageMap = new Map<string, PipelineColumn['cards']>();
+        for (const item of items) {
+          const stage = String(item.stage || item.stage_name || 'Unknown');
+          if (!stageMap.has(stage)) stageMap.set(stage, []);
+          stageMap.get(stage)!.push({
+            id: String(item.id || ''),
+            contactName: String(item.contactName || item.contact_name || 'Unknown'),
+            company: String(item.company || item.company_name || ''),
+            value: Number(item.value || item.deal_value || 0),
+            score: Number(item.score || item.confidence || 50),
+            daysInStage: Number(item.daysInStage || item.days_in_stage || 0),
+          });
+        }
+
+        const cols: PipelineColumn[] = Array.from(stageMap.entries()).map(
+          ([name, cards]) => ({
+            id: name.toLowerCase().replace(/\s+/g, '_'),
+            name,
+            cards,
+          }),
+        );
+        setColumns(cols);
+      })
+      .catch(() => {
+        setColumns([]);
+      });
+  }, [selectedPipeline]);
+
+  if (loading) {
+    return (
+      <div className="max-w-full space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-48 bg-surface-containerHigh rounded-full animate-pulse" />
+          <div className="h-4 w-32 bg-surface-containerHigh rounded animate-pulse" />
+        </div>
+        <div className="flex gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-[300px] flex-shrink-0">
+              <div className="h-5 w-24 bg-surface-containerHigh rounded animate-pulse mb-3" />
+              <div className="bg-surface-container rounded-lg p-2 min-h-[200px] space-y-2">
+                {Array.from({ length: Math.max(1, 3 - i) }).map((_, j) => (
+                  <div
+                    key={j}
+                    className="bg-surface-containerLow rounded-md border border-outline-variant p-4 space-y-2"
+                  >
+                    <div className="h-3 w-24 bg-surface-containerHigh rounded animate-pulse" />
+                    <div className="h-3 w-16 bg-surface-containerHigh rounded animate-pulse" />
+                    <div className="h-1.5 w-full bg-surface-containerHigh rounded-full animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && pipelines.length === 0) {
+    return <ApiErrorState />;
+  }
+
+  const totalValue = columns.reduce(
     (sum, col) => sum + col.cards.reduce((s, c) => s + c.value, 0),
     0,
   );
-  const totalDeals = mockColumns.reduce(
+  const totalDeals = columns.reduce(
     (sum, col) => sum + col.cards.length,
     0,
   );
@@ -151,7 +148,7 @@ export default function PipelinePage() {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 px-4 py-2.5 bg-surface border border-outline-variant rounded-full text-sm font-medium text-onSurface hover:border-outline transition-m3"
             >
-              {selectedPipeline.name}
+              {selectedPipeline?.name || 'Select Pipeline'}
               <ChevronDown className="w-4 h-4 text-onSurface-variant" />
             </button>
             {dropdownOpen && (
@@ -165,7 +162,7 @@ export default function PipelinePage() {
                     }}
                     className={cn(
                       'w-full text-left px-4 py-2.5 text-sm transition-m3',
-                      selectedPipeline.id === pipeline.id
+                      selectedPipeline?.id === pipeline.id
                         ? 'bg-secondary-container text-onSecondary-container font-medium'
                         : 'text-onSurface hover:bg-surface-container',
                     )}
@@ -205,7 +202,13 @@ export default function PipelinePage() {
       </div>
 
       {/* Pipeline Board */}
-      <PipelineBoard columns={mockColumns} />
+      {columns.length > 0 ? (
+        <PipelineBoard columns={columns} />
+      ) : (
+        <div className="text-center py-16 text-sm text-onSurface-variant">
+          No pipeline items found. Add your first deal to get started.
+        </div>
+      )}
     </div>
   );
 }

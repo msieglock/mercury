@@ -1,5 +1,9 @@
 'use client';
 
+export const runtime = 'edge';
+
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -18,115 +22,140 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { cn, getInitials, formatRelativeTime, segmentLabel } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
+import { LoadingSkeleton, ApiErrorState } from '@/components/loading-skeleton';
 
-// --- Mock Data ---------------------------------------------------------------
+interface Contact {
+  id: string;
+  fullName: string;
+  firstName: string;
+  title: string;
+  company: string;
+  email: string;
+  phone: string;
+  linkedinUrl: string;
+  location: string;
+  segment: string;
+  outreachPath: string;
+  score: number;
+  tags: string[];
+  notes: string;
+}
 
-const contact = {
-  id: '1',
-  fullName: 'Sarah Chen',
-  firstName: 'Sarah',
-  title: 'Partner',
-  company: 'Sequoia Capital',
-  email: 'sarah@sequoia.com',
-  phone: '+1 (415) 555-0142',
-  linkedinUrl: 'https://linkedin.com/in/sarachen',
-  location: 'San Francisco, CA',
-  segment: 'hot_lead',
-  outreachPath: 'warm_intro',
-  score: 92,
-  avatarUrl: null,
-  tags: ['Investor', 'Series A', 'FinTech'],
-  notes:
-    'Met at TechCrunch Disrupt. Very interested in our AI approach. Has invested in similar companies.',
-};
-
-const interactions = [
-  {
-    id: '1',
-    type: 'email_received' as const,
-    subject: 'Re: Mercury deck - Series A',
-    body: 'Hi John, thanks for sending the updated deck. I had a chance to review it with my team. The Q4 metrics are impressive. Could we set up a call next week to discuss further?',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    sentiment: 'positive' as const,
-  },
-  {
-    id: '2',
-    type: 'email_sent' as const,
-    subject: 'Re: Mercury deck - Series A',
-    body: "Hi Sarah, great to connect at Disrupt! As promised, here is our updated deck with Q4 metrics. Happy to discuss anytime.",
-    timestamp: new Date(Date.now() - 172800000).toISOString(),
-    sentiment: 'neutral' as const,
-  },
-  {
-    id: '3',
-    type: 'meeting' as const,
-    subject: 'TechCrunch Disrupt - Coffee meeting',
-    body: 'Met at the conference. Discussed Mercury vision and AI-first approach. She was particularly interested in the outreach path recommendation engine.',
-    timestamp: new Date(Date.now() - 604800000).toISOString(),
-    sentiment: 'positive' as const,
-  },
-  {
-    id: '4',
-    type: 'note' as const,
-    subject: 'Research notes',
-    body: 'Sequoia has been actively investing in AI infrastructure companies. Sarah led their investment in Anthropic and is looking for applied AI plays.',
-    timestamp: new Date(Date.now() - 864000000).toISOString(),
-    sentiment: 'neutral' as const,
-  },
-];
-
-const insights = [
-  {
-    label: 'Best Time to Contact',
-    value: 'Tues/Thurs, 10-11 AM PT',
-  },
-  {
-    label: 'Response Rate',
-    value: '85% within 24h',
-  },
-  {
-    label: 'Communication Preference',
-    value: 'Email (formal tone)',
-  },
-  {
-    label: 'Deal Probability',
-    value: '72% based on engagement signals',
-  },
-];
-
-const enrichmentData = [
-  { label: 'Company Size', value: '500+ employees' },
-  { label: 'Industry', value: 'Venture Capital' },
-  { label: 'Fund Size', value: '$8B AUM' },
-  { label: 'Recent Investments', value: 'Anthropic, Stripe, Notion' },
-  { label: 'LinkedIn Connections', value: '5,200+' },
-];
+interface Interaction {
+  id: string;
+  type: string;
+  subject: string;
+  body: string;
+  timestamp: string;
+  sentiment: string;
+}
 
 const typeIcons: Record<string, React.ElementType> = {
   email_sent: Mail,
   email_received: Mail,
+  email: Mail,
   meeting: Video,
   note: FileText,
   sms_sent: MessageSquare,
   sms_received: MessageSquare,
+  sms: MessageSquare,
   linkedin_message: Linkedin,
+  linkedin: Linkedin,
   call: Phone,
 };
 
 const typeLabels: Record<string, string> = {
   email_sent: 'Email sent',
   email_received: 'Email received',
+  email: 'Email',
   meeting: 'Meeting',
   note: 'Note',
   sms_sent: 'SMS sent',
   sms_received: 'SMS received',
+  sms: 'SMS',
   linkedin_message: 'LinkedIn',
+  linkedin: 'LinkedIn',
   call: 'Call',
 };
 
-// --- Component ---------------------------------------------------------------
+// --- Component ---
 
 export default function ContactDetailPage() {
+  const params = useParams();
+  const contactId = params.id as string;
+
+  const [contact, setContact] = useState<Contact | null>(null);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    apiClient(`/api/contacts/${contactId}`)
+      .then((data) => {
+        const c = data.contact || data;
+        setContact({
+          id: String(c.id || ''),
+          fullName: String(c.fullName || c.full_name || c.name || 'Unknown'),
+          firstName: String(c.firstName || c.first_name || (c.fullName || c.full_name || '').split(' ')[0] || ''),
+          title: String(c.title || ''),
+          company: String(c.company || c.company_name || ''),
+          email: String(c.email || ''),
+          phone: String(c.phone || ''),
+          linkedinUrl: String(c.linkedinUrl || c.linkedin_url || ''),
+          location: String(c.location || ''),
+          segment: String(c.segment || 'cold'),
+          outreachPath: String(c.outreachPath || c.outreach_path || ''),
+          score: Number(c.score || c.relationship_score || 0),
+          tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
+          notes: String(c.notes || ''),
+        });
+
+        // Extract interactions if included in response
+        if (c.interactions || data.interactions) {
+          const raw = c.interactions || data.interactions || [];
+          setInteractions(
+            raw.map((i: Record<string, unknown>) => ({
+              id: String(i.id || ''),
+              type: String(i.type || 'email'),
+              subject: String(i.subject || ''),
+              body: String(i.body || i.content || ''),
+              timestamp: String(i.timestamp || i.created_at || new Date().toISOString()),
+              sentiment: String(i.sentiment || 'neutral'),
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        setError(true);
+      })
+      .finally(() => setLoading(false));
+  }, [contactId]);
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="h-4 w-24 bg-surface-containerHigh rounded animate-pulse mb-6" />
+        <LoadingSkeleton variant="detail" rows={4} />
+      </div>
+    );
+  }
+
+  if (error || !contact) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <Link
+          href="/people"
+          className="inline-flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3 mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to People
+        </Link>
+        <ApiErrorState message="Could not load contact details" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       {/* Back Link */}
@@ -156,8 +185,14 @@ export default function ContactDetailPage() {
                   {contact.fullName}
                 </h1>
                 <p className="text-onSurface-variant mt-0.5">
-                  {contact.title} at{' '}
-                  <span className="font-medium">{contact.company}</span>
+                  {contact.title}
+                  {contact.company && (
+                    <>
+                      {' '}
+                      at{' '}
+                      <span className="font-medium">{contact.company}</span>
+                    </>
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -169,63 +204,64 @@ export default function ContactDetailPage() {
                 >
                   {segmentLabel(contact.segment)}
                 </span>
-                <span className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-50 text-emerald-700">
-                  Score: {contact.score}
-                </span>
+                {contact.score > 0 && (
+                  <span className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-50 text-emerald-700">
+                    Score: {contact.score}
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Contact Info Bar */}
-            <div className="flex items-center gap-6 mt-4">
-              <a
-                href={`mailto:${contact.email}`}
-                className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
-              >
-                <Mail className="w-3.5 h-3.5 text-onSurface-variant" />
-                {contact.email}
-              </a>
-              <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
-                <Phone className="w-3.5 h-3.5 text-onSurface-variant" />
-                {contact.phone}
-              </span>
-              <a
-                href={contact.linkedinUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
-              >
-                <Linkedin className="w-3.5 h-3.5 text-onSurface-variant" />
-                LinkedIn
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
-                <MapPin className="w-3.5 h-3.5 text-onSurface-variant" />
-                {contact.location}
-              </span>
-            </div>
-
-            {/* Outreach Path Badge */}
-            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-surface-containerLow rounded-md text-xs">
-              <UserPlus className="w-3.5 h-3.5 text-primary" />
-              <span className="font-medium text-onSurface">
-                Outreach Path: Warm Intro
-              </span>
-              <span className="text-onSurface-variant">
-                via David Park (mutual connection)
-              </span>
+            <div className="flex items-center gap-6 mt-4 flex-wrap">
+              {contact.email && (
+                <a
+                  href={`mailto:${contact.email}`}
+                  className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  {contact.email}
+                </a>
+              )}
+              {contact.phone && (
+                <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
+                  <Phone className="w-3.5 h-3.5" />
+                  {contact.phone}
+                </span>
+              )}
+              {contact.linkedinUrl && (
+                <a
+                  href={contact.linkedinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-sm text-onSurface-variant hover:text-onSurface transition-m3"
+                >
+                  <Linkedin className="w-3.5 h-3.5" />
+                  LinkedIn
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              {contact.location && (
+                <span className="flex items-center gap-1.5 text-sm text-onSurface-variant">
+                  <MapPin className="w-3.5 h-3.5" />
+                  {contact.location}
+                </span>
+              )}
             </div>
 
             {/* Tags */}
-            <div className="flex items-center gap-2 mt-3">
-              {contact.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2.5 py-1 text-xs font-medium text-onSecondary-container bg-secondary-container rounded-lg"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
+            {contact.tags.length > 0 && (
+              <div className="flex items-center gap-2 mt-3">
+                {contact.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-1 text-xs font-medium text-onSecondary-container bg-secondary-container rounded-lg"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -240,94 +276,96 @@ export default function ContactDetailPage() {
             </h2>
           </div>
           <div className="p-5">
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-[15px] top-6 bottom-6 w-[1px] bg-outline-variant" />
-
-              <div className="space-y-6">
-                {interactions.map((interaction) => {
-                  const Icon = typeIcons[interaction.type] || Mail;
-                  const isInbound = interaction.type.includes('received');
-
-                  return (
-                    <div
-                      key={interaction.id}
-                      className="relative flex gap-4 group"
-                    >
-                      {/* Timeline dot */}
-                      <div
-                        className={cn(
-                          'w-[31px] h-[31px] rounded-full flex items-center justify-center flex-shrink-0 z-10',
-                          isInbound
-                            ? 'bg-primary-container border-2 border-primary/30'
-                            : 'bg-surface-containerHigh border-2 border-outline-variant',
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            'w-3.5 h-3.5',
-                            isInbound
-                              ? 'text-primary'
-                              : 'text-onSurface-variant',
-                          )}
-                        />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 pb-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-onSurface-variant">
-                            {typeLabels[interaction.type]}
-                          </span>
-                          <span className="text-xs text-onSurface-variant">
-                            {formatRelativeTime(interaction.timestamp)}
-                          </span>
-                          {interaction.sentiment === 'positive' && (
-                            <span className="text-xs text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                              Positive
-                            </span>
-                          )}
-                        </div>
-                        {interaction.subject && (
-                          <p className="text-sm font-medium text-onSurface">
-                            {interaction.subject}
-                          </p>
-                        )}
-                        <p className="text-sm text-onSurface-variant mt-1 leading-relaxed">
-                          {interaction.body}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+            {interactions.length === 0 ? (
+              <div className="text-center py-8 text-sm text-onSurface-variant">
+                No interactions recorded yet
               </div>
-            </div>
+            ) : (
+              <div className="relative">
+                {/* Timeline line */}
+                <div className="absolute left-[15px] top-6 bottom-6 w-[1px] bg-outline-variant" />
+
+                <div className="space-y-6">
+                  {interactions.map((interaction) => {
+                    const Icon = typeIcons[interaction.type] || Mail;
+                    const isInbound =
+                      interaction.type.includes('received') ||
+                      (!interaction.type.includes('sent') &&
+                        !interaction.type.includes('note'));
+
+                    return (
+                      <div
+                        key={interaction.id}
+                        className="relative flex gap-4 group"
+                      >
+                        {/* Timeline dot */}
+                        <div
+                          className={cn(
+                            'w-[31px] h-[31px] rounded-full flex items-center justify-center flex-shrink-0 z-10',
+                            isInbound
+                              ? 'bg-primary-container border-2 border-primary/30'
+                              : 'bg-surface-containerHigh border-2 border-outline-variant',
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              'w-3.5 h-3.5',
+                              isInbound
+                                ? 'text-primary'
+                                : 'text-onSurface-variant',
+                            )}
+                          />
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 pb-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-onSurface-variant">
+                              {typeLabels[interaction.type] || interaction.type}
+                            </span>
+                            <span className="text-xs text-onSurface-variant">
+                              {formatRelativeTime(interaction.timestamp)}
+                            </span>
+                            {interaction.sentiment === 'positive' && (
+                              <span className="text-xs text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                Positive
+                              </span>
+                            )}
+                          </div>
+                          {interaction.subject && (
+                            <p className="text-sm font-medium text-onSurface">
+                              {interaction.subject}
+                            </p>
+                          )}
+                          <p className="text-sm text-onSurface-variant mt-1 leading-relaxed">
+                            {interaction.body}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT - AI Insights + Enrichment */}
+        {/* RIGHT - Notes + Enrichment */}
         <div className="space-y-6">
-          {/* AI Insights */}
-          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
-            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-medium text-onSurface">
-                AI Insights
-              </h2>
+          {/* Notes */}
+          {contact.notes && (
+            <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+              <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-medium text-onSurface">Notes</h2>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-onSurface-variant leading-relaxed">
+                  {contact.notes}
+                </p>
+              </div>
             </div>
-            <div className="divide-y divide-outline-variant">
-              {insights.map((insight) => (
-                <div key={insight.label} className="px-5 py-3">
-                  <p className="text-xs font-medium text-onSurface-variant uppercase tracking-wider">
-                    {insight.label}
-                  </p>
-                  <p className="text-sm text-onSurface mt-0.5 font-medium">
-                    {insight.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* Relationship Graph Placeholder */}
           <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
@@ -349,27 +387,6 @@ export default function ContactDetailPage() {
                   Visualize connections and mutual contacts
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* Enrichment Data (Apollo) */}
-          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
-            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-onSurface-variant" />
-              <h2 className="text-sm font-medium text-onSurface">
-                Enrichment Data
-              </h2>
-              <span className="ml-auto text-xs text-onSurface-variant">
-                via Apollo
-              </span>
-            </div>
-            <div className="divide-y divide-outline-variant">
-              {enrichmentData.map((item) => (
-                <div key={item.label} className="px-5 py-3">
-                  <p className="text-xs text-onSurface-variant">{item.label}</p>
-                  <p className="text-sm text-onSurface mt-0.5">{item.value}</p>
-                </div>
-              ))}
             </div>
           </div>
         </div>

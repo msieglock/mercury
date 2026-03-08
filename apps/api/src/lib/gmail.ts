@@ -205,6 +205,45 @@ export async function fetchNewEmails(
 }
 
 /**
+ * Fetch all recent inbox emails (read and unread) since a given date.
+ */
+export async function fetchInboxEmails(
+  client: gmail_v1.Gmail,
+  since: Date,
+  maxResults: number = 50
+): Promise<ParsedEmail[]> {
+  const sinceEpoch = Math.floor(since.getTime() / 1000);
+
+  const listResponse = await client.users.messages.list({
+    userId: 'me',
+    maxResults,
+    q: `in:inbox after:${sinceEpoch}`,
+  });
+
+  const messageIds = listResponse.data.messages ?? [];
+  if (messageIds.length === 0) return [];
+
+  // Fetch in batches of 10 to avoid overloading
+  const messages: ParsedEmail[] = [];
+  for (let i = 0; i < messageIds.length; i += 10) {
+    const batch = messageIds.slice(i, i + 10);
+    const batchResults = await Promise.all(
+      batch.map(async (msg) => {
+        const full = await client.users.messages.get({
+          userId: 'me',
+          id: msg.id!,
+          format: 'full',
+        });
+        return parseMessage(full.data);
+      })
+    );
+    messages.push(...batchResults);
+  }
+
+  return messages;
+}
+
+/**
  * Send an email via the Gmail API.
  */
 export async function sendEmail(

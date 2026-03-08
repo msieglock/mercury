@@ -1,222 +1,188 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Sun,
   Zap,
   Users,
   Mail,
-  Calendar,
   TrendingUp,
-  Clock,
-  CheckCircle2,
-  BarChart3,
-  Bot,
 } from 'lucide-react';
 import { ActionCard } from '@/components/action-card';
 import { StatCard } from '@/components/stat-card';
-import { cn } from '@/lib/utils';
-// --- Mock Data ---------------------------------------------------------------
-
-const mockActions = [
-  {
-    id: '1',
-    type: 'reply_needed',
-    title: 'Sarah Chen responded about Series A intro',
-    description:
-      'She mentioned she\'s interested but wants to review the deck first. Scout suggests sending the updated version with Q4 metrics.',
-    priority: 'urgent',
-    agentType: 'scout',
-    contactName: 'Sarah Chen',
-    companyName: 'Sequoia Capital',
-    dueAt: new Date().toISOString(),
-    primaryActionLabel: 'View & Reply',
-    isOverdue: false,
-  },
-  {
-    id: '2',
-    type: 'follow_up',
-    title: 'Follow up with Marcus on partnership proposal',
-    description:
-      'Last email was 5 days ago. Cadence recommends a gentle check-in with a case study attachment.',
-    priority: 'high',
-    agentType: 'cadence',
-    contactName: 'Marcus Johnson',
-    companyName: 'Stripe',
-    dueAt: new Date(Date.now() + 86400000).toISOString(),
-    primaryActionLabel: 'Send Follow-up',
-    isOverdue: false,
-  },
-  {
-    id: '3',
-    type: 'warm_intro',
-    title: 'Warm intro opportunity via David Park',
-    description:
-      'David is connected to Lisa Wang (VP Eng at Figma). Scout found she\'s actively hiring. Perfect recruiting lead.',
-    priority: 'high',
-    agentType: 'scout',
-    contactName: 'Lisa Wang',
-    companyName: 'Figma',
-    dueAt: null,
-    primaryActionLabel: 'Request Intro',
-    isOverdue: false,
-  },
-  {
-    id: '4',
-    type: 'meeting_prep',
-    title: 'Prep for call with Acme Corp in 2 hours',
-    description:
-      'Analyst compiled: revenue up 23% YoY, new CTO hired in Q3, recently raised $50M Series C.',
-    priority: 'medium',
-    agentType: 'analyst',
-    contactName: 'James Wright',
-    companyName: 'Acme Corp',
-    dueAt: new Date(Date.now() + 7200000).toISOString(),
-    primaryActionLabel: 'View Brief',
-    isOverdue: false,
-  },
-  {
-    id: '5',
-    type: 'deal_cold',
-    title: 'Deal going cold: TechStart renewal',
-    description:
-      'No engagement for 12 days. Champion (Amy) hasn\'t opened last 2 emails. Risk score increased to 72.',
-    priority: 'medium',
-    agentType: 'analyst',
-    contactName: 'Amy Rodriguez',
-    companyName: 'TechStart',
-    dueAt: null,
-    primaryActionLabel: 'Re-engage',
-    isOverdue: true,
-  },
-  {
-    id: '6',
-    type: 'new_prospect',
-    title: 'New prospect matched your ICP',
-    description:
-      'Scout identified Ryan Kim, CTO at DataFlow (Series B, 120 employees). 89% ICP match. Best path: warm intro via Alex.',
-    priority: 'low',
-    agentType: 'scout',
-    contactName: 'Ryan Kim',
-    companyName: 'DataFlow',
-    dueAt: null,
-    primaryActionLabel: 'Review Profile',
-    isOverdue: false,
-  },
-];
-
-const mockMeetings = [
-  {
-    id: '1',
-    time: '9:00 AM',
-    title: 'Team standup',
-    attendees: ['Alex M.', 'Sarah L.', 'James W.'],
-    duration: '15 min',
-  },
-  {
-    id: '2',
-    time: '10:30 AM',
-    title: 'Acme Corp - Quarterly Review',
-    attendees: ['James Wright', 'Amy Rodriguez'],
-    duration: '45 min',
-  },
-  {
-    id: '3',
-    time: '1:00 PM',
-    title: 'Pipeline review with team',
-    attendees: ['Full team'],
-    duration: '30 min',
-  },
-  {
-    id: '4',
-    time: '3:00 PM',
-    title: 'Lisa Wang intro call',
-    attendees: ['Lisa Wang', 'David Park'],
-    duration: '30 min',
-  },
-];
-
-const pipelineHealth = [
-  { stage: 'Discovery', count: 12, percentage: 30 },
-  { stage: 'Qualified', count: 8, percentage: 20 },
-  { stage: 'Proposal', count: 6, percentage: 15 },
-  { stage: 'Negotiation', count: 4, percentage: 10 },
-  { stage: 'Closed', count: 10, percentage: 25 },
-];
-
-const autoActions = [
-  { label: 'Auto-logged 3 meetings from calendar', time: '2h ago' },
-  { label: 'Enriched 5 new contacts via Apollo', time: '4h ago' },
-  { label: 'Classified 12 incoming emails', time: '6h ago' },
-];
-
-// --- Component ---------------------------------------------------------------
+import { apiClient } from '@/lib/api';
+import { useUser } from '@/hooks/use-user';
+import { LoadingSkeleton, ApiErrorState } from '@/components/loading-skeleton';
 
 export default function TodayPage() {
+  const { user } = useUser();
+  const [actions, setActions] = useState<Record<string, unknown>[] | null>(null);
+  const [contacts, setContacts] = useState<Record<string, unknown>[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      apiClient('/api/actions').catch(() => []),
+      apiClient('/api/contacts').catch(() => []),
+    ])
+      .then(([actionsData, contactsData]) => {
+        setActions(actionsData.actions || actionsData || []);
+        setContacts(contactsData.contacts || contactsData || []);
+      })
+      .catch(() => {
+        setError(true);
+        setActions([]);
+        setContacts([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleAction = useCallback(async (id: string) => {
+    try {
+      await apiClient(`/api/actions/${id}/send`, { method: 'POST' });
+      setActions((prev) => (prev || []).filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to send action:', err);
+    }
+  }, []);
+
+  const handleDismiss = useCallback(async (id: string) => {
+    try {
+      await apiClient(`/api/actions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'dismissed' }),
+      });
+      setActions((prev) => (prev || []).filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to dismiss action:', err);
+    }
+  }, []);
+
+  const handleSnooze = useCallback(async (id: string) => {
+    const snoozedUntil = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    try {
+      await apiClient(`/api/actions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ snoozed_until: snoozedUntil }),
+      });
+      setActions((prev) => (prev || []).filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to snooze action:', err);
+    }
+  }, []);
+
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const firstName = user?.full_name?.split(' ')[0] || 'there';
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="space-y-3">
+          <div className="h-8 w-64 bg-surface-containerHigh rounded animate-pulse" />
+          <div className="h-5 w-96 bg-surface-containerHigh rounded animate-pulse" />
+        </div>
+        <LoadingSkeleton variant="cards" />
+        <LoadingSkeleton variant="list" rows={4} />
+      </div>
+    );
+  }
+
+  if (error && (!actions || actions.length === 0)) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <ApiErrorState />
+      </div>
+    );
+  }
+
+  const mappedActions = (actions || []).map((a) => ({
+    id: String(a.id || ''),
+    type: String(a.type || a.action_type || 'follow_up'),
+    title: String(a.title || ''),
+    description: a.description ? String(a.description) : null,
+    priority: String(a.priority || 'medium') as 'urgent' | 'high' | 'medium' | 'low',
+    agentType: String(a.agentType || a.agent_type || 'scout'),
+    contactName: a.contactName || a.contact_name ? String(a.contactName || a.contact_name) : null,
+    companyName: a.companyName || a.company_name ? String(a.companyName || a.company_name) : null,
+    dueAt: a.dueAt || a.due_at ? String(a.dueAt || a.due_at) : null,
+    primaryActionLabel: String(a.primaryActionLabel || a.primary_action_label || 'View'),
+    isOverdue: Boolean(a.isOverdue || a.is_overdue),
+  }));
+
+  const contactCount = (contacts || []).length;
+  const urgentCount = mappedActions.filter(
+    (a) => a.priority === 'urgent' || a.priority === 'high',
+  ).length;
+
+  const pipelineDisplay = user?.pipelineValue
+    ? user.pipelineValue >= 1000
+      ? `$${(user.pipelineValue / 1000).toFixed(0)}K`
+      : `$${user.pipelineValue}`
+    : '--';
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Morning Briefing */}
       <div className="mb-8">
         <h2 className="text-2xl font-medium text-onSurface">
-          {greeting}, John.
+          {greeting}, {firstName}.
         </h2>
         <p className="text-onSurface-variant mt-1">
           Here&apos;s your day. You have{' '}
-          <span className="font-medium text-onSurface">6 actions</span> and{' '}
-          <span className="font-medium text-onSurface">4 meetings</span> today.
+          <span className="font-medium text-onSurface">
+            {mappedActions.length} actions
+          </span>{' '}
+          to review.
         </p>
 
         {/* Stats Row */}
         <div className="grid grid-cols-4 gap-4 mt-6">
           <StatCard
             label="Actions Today"
-            value={6}
-            change="+2 from yesterday"
+            value={mappedActions.length}
+            change={`${urgentCount} urgent`}
             changeType="neutral"
             icon={Zap}
           />
           <StatCard
-            label="Contacts Engaged"
-            value={28}
-            change="+12% this week"
-            changeType="positive"
+            label="Contacts"
+            value={contactCount}
             icon={Users}
           />
           <StatCard
             label="Emails Pending"
-            value={3}
-            change="2 AI drafts ready"
+            value={mappedActions.filter((a) => a.type === 'reply_needed').length}
+            change="needs reply"
             changeType="neutral"
             icon={Mail}
           />
           <StatCard
             label="Pipeline Value"
-            value="$2.4M"
-            change="+$180K this month"
-            changeType="positive"
+            value={pipelineDisplay}
             icon={TrendingUp}
           />
         </div>
       </div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-[1fr_380px] gap-8">
-        {/* LEFT COLUMN - Action Cards */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-onSurface">
-              Action Feed
-            </h3>
-            <div className="flex items-center gap-2 text-xs text-onSurface-variant">
-              <span>Sorted by priority</span>
-            </div>
+      {/* Action Cards */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium text-onSurface">Action Feed</h3>
+          <div className="flex items-center gap-2 text-xs text-onSurface-variant">
+            <span>Sorted by priority</span>
           </div>
+        </div>
 
-          <div className="space-y-3">
-            {mockActions.map((action) => (
+        <div className="space-y-3">
+          {mappedActions.length === 0 ? (
+            <div className="text-center py-12 text-sm text-onSurface-variant">
+              No actions right now. You&apos;re all caught up!
+            </div>
+          ) : (
+            mappedActions.map((action) => (
               <ActionCard
                 key={action.id}
                 id={action.id}
@@ -230,121 +196,12 @@ export default function TodayPage() {
                 dueAt={action.dueAt}
                 primaryActionLabel={action.primaryActionLabel}
                 isOverdue={action.isOverdue}
+                onAction={() => handleAction(action.id)}
+                onDismiss={() => handleDismiss(action.id)}
+                onSnooze={() => handleSnooze(action.id)}
               />
-            ))}
-          </div>
-
-          {/* Auto-actions */}
-          <div className="mt-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-onSurface-variant" />
-              <h4 className="text-sm font-medium text-onSurface-variant">
-                Auto-actions
-              </h4>
-            </div>
-            <div className="space-y-2">
-              {autoActions.map((action, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 px-4 py-2.5 bg-surface-container rounded-md text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span className="flex-1 text-onSurface-variant">
-                    {action.label}
-                  </span>
-                  <span className="text-xs text-onSurface-variant">
-                    {action.time}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="space-y-6">
-          {/* Today's Meetings */}
-          <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-onSurface-variant" />
-              <h3 className="text-sm font-medium text-onSurface">
-                Today&apos;s Meetings
-              </h3>
-            </div>
-            <div className="divide-y divide-outline-variant">
-              {mockMeetings.map((meeting) => (
-                <div
-                  key={meeting.id}
-                  className="px-5 py-3.5 hover:bg-surface-containerLow transition-m3 cursor-pointer"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-medium text-primary">
-                          {meeting.time}
-                        </span>
-                        <span className="text-xs text-onSurface-variant">
-                          {meeting.duration}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium text-onSurface mt-0.5">
-                        {meeting.title}
-                      </p>
-                      <p className="text-xs text-onSurface-variant mt-0.5">
-                        {meeting.attendees.join(', ')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pipeline Health */}
-          <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-outline-variant flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-onSurface-variant" />
-              <h3 className="text-sm font-medium text-onSurface">
-                Pipeline Health
-              </h3>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              {pipelineHealth.map((stage) => (
-                <div key={stage.stage}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-onSurface-variant">
-                      {stage.stage}
-                    </span>
-                    <span className="text-xs text-onSurface-variant">
-                      {stage.count}
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-surface-containerHigh rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${stage.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-surface border border-outline-variant rounded-md p-4">
-              <p className="text-xs text-onSurface-variant">Avg. Response</p>
-              <p className="text-lg font-medium text-onSurface mt-1">
-                2.4h
-              </p>
-            </div>
-            <div className="bg-surface border border-outline-variant rounded-md p-4">
-              <p className="text-xs text-onSurface-variant">Win Rate</p>
-              <p className="text-lg font-medium text-onSurface mt-1">
-                34%
-              </p>
-            </div>
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
