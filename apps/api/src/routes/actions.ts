@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
 import { getUserId } from '../middleware/auth.js';
 import { getGmailClient, sendEmail } from '../lib/gmail.js';
+import { sendSms } from '../lib/twilio.js';
+import { createNotification } from './notifications.js';
 
 const actions = new Hono<AuthEnv>();
 
@@ -41,16 +43,7 @@ actions.get('/', async (c) => {
          LEFT JOIN contacts c ON a.contact_id = c.id
          LEFT JOIN companies co ON c.company_id = co.id
          WHERE a.user_id = ? AND a.status = 'pending'
-         ORDER BY
-           CASE a.priority
-             WHEN 'urgent' THEN 0
-             WHEN 'high' THEN 1
-             WHEN 'medium' THEN 2
-             WHEN 'low' THEN 3
-             ELSE 4
-           END,
-           a.due_at ASC,
-           a.created_at DESC`
+         ORDER BY a.priority DESC, a.due_at ASC, a.created_at DESC`
       )
       .bind(userId)
       .all();
@@ -60,9 +53,8 @@ actions.get('/', async (c) => {
       id: action.id,
       type: action.type,
       title: action.title,
-      description: action.description,
+      description: action.body,
       priority: action.priority,
-      agent_type: action.agent_type,
       contact_name: action.contact_full_name ?? null,
       contact_title: action.contact_title ?? null,
       company_name: action.company_name ?? null,
@@ -109,12 +101,10 @@ actions.patch('/:id', async (c) => {
     const values: unknown[] = [new Date().toISOString()];
 
     if (parsed.data.status) {
+      // Map 'completed' to 'done' to match schema
+      const dbStatus = parsed.data.status === 'completed' ? 'done' : parsed.data.status;
       setClauses.push('status = ?');
-      values.push(parsed.data.status);
-      if (parsed.data.status === 'completed') {
-        setClauses.push('completed_at = ?');
-        values.push(new Date().toISOString());
-      }
+      values.push(dbStatus);
     }
 
     if (parsed.data.snoozed_until) {
@@ -210,7 +200,7 @@ actions.post('/:id/send', async (c) => {
       // Send via Gmail
       const linkedAccount = await db
         .prepare(
-          'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+          'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ?'
         )
         .bind(userId, 'google')
         .first();
@@ -237,17 +227,18 @@ actions.post('/:id/send', async (c) => {
       // Log the interaction
       await db
         .prepare(
-          `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO interactions (id, user_id, contact_id, channel, direction, subject, body_snippet, thread_id, metadata, occurred_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           crypto.randomUUID(),
           userId,
           action.contact_id,
-          'email_sent',
-          subject,
-          messageBody,
           'email',
+          'outbound',
+          subject,
+          messageBody.substring(0, 500),
+          result.threadId ?? null,
           JSON.stringify({
             gmail_id: result.id,
             thread_id: result.threadId,
@@ -258,12 +249,12 @@ actions.post('/:id/send', async (c) => {
         )
         .run();
 
-      // Mark action as completed
+      // Mark action as done
       await db
         .prepare(
-          'UPDATE actions SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?'
+          'UPDATE actions SET status = ?, updated_at = ? WHERE id = ?'
         )
-        .bind('completed', new Date().toISOString(), new Date().toISOString(), actionId)
+        .bind('done', new Date().toISOString(), actionId)
         .run();
 
       // Update contact last interaction
@@ -281,8 +272,57 @@ actions.post('/:id/send', async (c) => {
         thread_id: result.threadId,
       });
     } else {
-      // SMS sending -- placeholder
-      return c.json({ error: 'SMS sending not yet implemented' }, 501);
+      // SMS via Twilio
+      if (!c.env.TWILIO_ACCOUNT_SID || !c.env.TWILIO_AUTH_TOKEN || !c.env.TWILIO_PHONE_NUMBER) {
+        return c.json({ error: 'Twilio not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.' }, 400);
+      }
+
+      const phone = parsed.data.override_to ?? (action.contact_phone as string);
+      if (!phone) {
+        return c.json({ error: 'No phone number available for this contact' }, 400);
+      }
+
+      const result = await sendSms(
+        {
+          accountSid: c.env.TWILIO_ACCOUNT_SID,
+          authToken: c.env.TWILIO_AUTH_TOKEN,
+          fromNumber: c.env.TWILIO_PHONE_NUMBER,
+        },
+        phone,
+        messageBody
+      );
+
+      // Log the interaction
+      await db
+        .prepare(
+          `INSERT INTO interactions (id, user_id, contact_id, channel, direction, subject, body_snippet, metadata, occurred_at, created_at)
+           VALUES (?, ?, ?, 'text', 'outbound', NULL, ?, ?, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          action.contact_id,
+          messageBody.substring(0, 500),
+          JSON.stringify({ twilio_sid: result.sid, action_id: actionId }),
+          new Date().toISOString(),
+          new Date().toISOString()
+        )
+        .run();
+
+      // Mark action as done
+      await db.prepare('UPDATE actions SET status = ?, updated_at = ? WHERE id = ?')
+        .bind('done', new Date().toISOString(), actionId).run();
+
+      if (action.contact_id) {
+        await db.prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
+          .bind(new Date().toISOString(), action.contact_id as string).run();
+      }
+
+      return c.json({
+        success: true,
+        channel: 'sms',
+        twilio_sid: result.sid,
+      });
     }
   } catch (error) {
     console.error('[actions] Send failed:', error);

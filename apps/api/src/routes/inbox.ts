@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../middleware/auth.js';
-import { getUserId } from '../middleware/auth.js';
+import { getUserId, getUser } from '../middleware/auth.js';
 import { getGmailClient, sendEmail } from '../lib/gmail.js';
 import { aiGateway } from '../lib/ai-gateway.js';
 
@@ -35,7 +35,7 @@ inbox.get('/', async (c) => {
          FROM interactions i
          LEFT JOIN contacts c ON i.contact_id = c.id
          LEFT JOIN companies co ON c.company_id = co.id
-         WHERE i.user_id = ? AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
+         WHERE i.user_id = ? AND i.channel IN ('email', 'text')
          ORDER BY i.occurred_at DESC
          LIMIT ? OFFSET ?`
       )
@@ -44,7 +44,7 @@ inbox.get('/', async (c) => {
 
     const interactions = interactionsResult.results ?? [];
 
-    // Group by thread_id (from metadata) or contact_id
+    // Group by thread_id or contact_id
     const threadMap = new Map<
       string,
       {
@@ -63,7 +63,7 @@ inbox.get('/', async (c) => {
         ? JSON.parse(interaction.metadata as string)
         : (interaction.metadata as Record<string, unknown> | null);
       const threadId =
-        (meta?.thread_id as string) ?? (interaction.contact_id as string) ?? (interaction.id as string);
+        (interaction.thread_id as string) ?? (meta?.thread_id as string) ?? (interaction.contact_id as string) ?? (interaction.id as string);
 
       if (!threadMap.has(threadId)) {
         const contactObj = interaction.contact_id_ref ? {
@@ -81,15 +81,16 @@ inbox.get('/', async (c) => {
           contact: contactObj,
           last_message: {
             id: interaction.id,
-            type: interaction.type,
+            channel: interaction.channel,
+            direction: interaction.direction,
             subject: interaction.subject,
-            body: ((interaction.body as string) ?? '').substring(0, 200),
+            body: ((interaction.body_snippet as string) ?? '').substring(0, 200),
             occurred_at: interaction.occurred_at,
             sentiment: interaction.sentiment,
           },
           message_count: 1,
           last_activity: interaction.occurred_at as string,
-          has_unread: interaction.type === 'email_received' || interaction.type === 'sms_received',
+          has_unread: (interaction.direction as string) === 'inbound',
           channel: (interaction.channel as string) ?? 'email',
         });
       } else {
@@ -124,7 +125,7 @@ inbox.get('/:threadId', async (c) => {
     const db = c.env.DB;
 
     // Fetch all messages in this thread
-    // Match by thread_id in metadata JSON or by contact_id
+    // Match by thread_id column, metadata thread_id, or contact_id
     const messagesResult = await db
       .prepare(
         `SELECT i.*,
@@ -133,11 +134,11 @@ inbox.get('/:threadId', async (c) => {
          FROM interactions i
          LEFT JOIN contacts c ON i.contact_id = c.id
          WHERE i.user_id = ?
-           AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
-           AND (json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
+           AND i.channel IN ('email', 'text')
+           AND (i.thread_id = ? OR json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
          ORDER BY i.occurred_at ASC`
       )
-      .bind(userId, threadId, threadId)
+      .bind(userId, threadId, threadId, threadId)
       .all();
 
     const messages = messagesResult.results ?? [];
@@ -155,18 +156,34 @@ inbox.get('/:threadId', async (c) => {
       title: firstMessage.contact_title,
     } : null;
 
-    // Parse metadata in messages
-    const parsedMessages = messages.map((m) => ({
-      ...m,
-      metadata: typeof m.metadata === 'string' ? JSON.parse(m.metadata as string) : m.metadata,
-      contacts: m.contact_id_ref ? {
+    // Parse metadata and add frontend-friendly fields
+    const user = getUser(c);
+    const userName = user?.full_name ?? 'Me';
+    const userEmail = user?.email ?? '';
+
+    const parsedMessages = messages.map((m) => {
+      const metadata = typeof m.metadata === 'string' ? JSON.parse(m.metadata as string) : m.metadata;
+      const contactInfo = m.contact_id_ref ? {
         id: m.contact_id_ref,
         full_name: m.contact_full_name,
         email: m.contact_email,
         avatar_url: m.contact_avatar_url,
         title: m.contact_title,
-      } : null,
-    }));
+      } : null;
+      const isOutbound = (m.direction as string) === 'outbound';
+
+      return {
+        ...m,
+        metadata,
+        contacts: contactInfo,
+        // Frontend-friendly computed fields
+        sender: isOutbound ? userName : (contactInfo?.full_name || (metadata as Record<string, unknown>)?.from_name || 'Unknown'),
+        senderEmail: isOutbound ? userEmail : (contactInfo?.email || (metadata as Record<string, unknown>)?.from || ''),
+        body: (m.body_snippet as string) || '',
+        isOutbound,
+        timestamp: m.occurred_at,
+      };
+    });
 
     return c.json({
       thread_id: threadId,
@@ -202,12 +219,12 @@ inbox.post('/:threadId/reply', async (c) => {
          FROM interactions i
          LEFT JOIN contacts c ON i.contact_id = c.id
          WHERE i.user_id = ?
-           AND i.type IN ('email_sent', 'email_received', 'sms_sent', 'sms_received')
-           AND (json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
+           AND i.channel IN ('email', 'text')
+           AND (i.thread_id = ? OR json_extract(i.metadata, '$.thread_id') = ? OR i.contact_id = ?)
          ORDER BY i.occurred_at DESC
          LIMIT 5`
       )
-      .bind(userId, threadId, threadId)
+      .bind(userId, threadId, threadId, threadId)
       .all();
 
     const threadMessages = threadMessagesResult.results ?? [];
@@ -229,7 +246,7 @@ inbox.post('/:threadId/reply', async (c) => {
     if (parsed.data.use_ai_draft) {
       const conversationContext = threadMessages
         .reverse()
-        .map((m) => `[${m.type}] ${m.occurred_at}: ${((m.body as string) ?? '').substring(0, 500)}`)
+        .map((m) => `[${m.channel}/${m.direction}] ${m.occurred_at}: ${((m.body_snippet as string) ?? '').substring(0, 500)}`)
         .join('\n\n');
 
       const user = await db
@@ -275,7 +292,7 @@ Write just the reply body, no subject line needed. Match the user's natural tone
     // Send the reply via Gmail
     const linkedAccount = await db
       .prepare(
-        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+        'SELECT * FROM linked_accounts WHERE user_id = ? AND provider = ?'
       )
       .bind(userId, 'google')
       .first();
@@ -305,17 +322,18 @@ Write just the reply body, no subject line needed. Match the user's natural tone
     // Log the interaction
     await db
       .prepare(
-        `INSERT INTO interactions (id, user_id, contact_id, type, subject, body, channel, metadata, occurred_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO interactions (id, user_id, contact_id, channel, direction, subject, body_snippet, thread_id, metadata, occurred_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         crypto.randomUUID(),
         userId,
         latestMessage.contact_ref_id ?? null,
-        'email_sent',
-        `Re: ${(latestMessage.subject as string) ?? '(no subject)'}`,
-        replyBody,
         'email',
+        'outbound',
+        `Re: ${(latestMessage.subject as string) ?? '(no subject)'}`,
+        replyBody.substring(0, 500),
+        result.threadId ?? null,
         JSON.stringify({
           gmail_id: result.id,
           thread_id: result.threadId,

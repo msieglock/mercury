@@ -70,17 +70,18 @@ async function logToAgentLogs(
   try {
     await db
       .prepare(
-        `INSERT INTO agent_logs (user_id, agent_type, action, tokens_used, model, cost_cents, duration_ms, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO agent_logs (id, user_id, action, model, input_tokens, output_tokens, latency_ms, request_body, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
+        crypto.randomUUID(),
         userId ?? null,
-        agentType ?? 'orchestrator',
         'ai_gateway_call',
-        tokensUsed.input + tokensUsed.output,
         model,
-        costCents,
+        tokensUsed.input,
+        tokensUsed.output,
         durationMs,
+        JSON.stringify({ agent_type: agentType ?? 'orchestrator', cost_cents: costCents }),
         error
       )
       .run();

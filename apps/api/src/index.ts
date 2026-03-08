@@ -12,7 +12,14 @@ import contactsRoutes from './routes/contacts.js';
 import pipelinesRoutes from './routes/pipelines.js';
 import inboxRoutes from './routes/inbox.js';
 import onboardingRoutes from './routes/onboarding.js';
+import settingsRoutes from './routes/settings.js';
+import notificationsRoutes from './routes/notifications.js';
+import searchRoutes from './routes/search.js';
+import analyticsRoutes from './routes/analytics.js';
+import sequencesRoutes from './routes/sequences.js';
+import organizationsRoutes from './routes/organizations.js';
 import { handleScheduled } from './jobs/scheduled.js';
+import { parseInboundSms } from './lib/twilio.js';
 
 // ─── App ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +35,7 @@ app.use(
       'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:8081',
+      'https://mercury-web-cte.pages.dev',
     ],
     allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -97,6 +105,42 @@ app.route('/auth', authRoutes);
 const protectedApp = new Hono<AuthEnv>();
 protectedApp.use('*', authMiddleware);
 
+// User profile endpoint
+protectedApp.get('/me', async (c) => {
+  const user = c.get('user');
+  const userId = c.get('userId');
+  const userObj = user as unknown as Record<string, unknown>;
+
+  // Fetch pipeline value
+  let pipelineValue = 0;
+  try {
+    const pv = await c.env.DB.prepare(
+      `SELECT COALESCE(SUM(pi.value), 0) as total
+       FROM pipeline_items pi JOIN pipelines p ON pi.pipeline_id = p.id
+       WHERE p.user_id = ?`
+    ).bind(userId).first<{ total: number }>();
+    pipelineValue = pv?.total ?? 0;
+  } catch {}
+
+  // Fetch unread notification count
+  let unreadNotifications = 0;
+  try {
+    const nc = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0'
+    ).bind(userId).first<{ count: number }>();
+    unreadNotifications = nc?.count ?? 0;
+  } catch {}
+
+  return c.json({
+    user: {
+      ...user,
+      hasStyleFingerprint: !!userObj?.style_fingerprint,
+      pipelineValue,
+      unreadNotifications,
+    },
+  });
+});
+
 // Mount route groups
 protectedApp.route('/sync', syncRoutes);
 protectedApp.route('/ai', aiRoutes);
@@ -105,9 +149,59 @@ protectedApp.route('/contacts', contactsRoutes);
 protectedApp.route('/pipelines', pipelinesRoutes);
 protectedApp.route('/inbox', inboxRoutes);
 protectedApp.route('/onboarding', onboardingRoutes);
+protectedApp.route('/settings', settingsRoutes);
+protectedApp.route('/notifications', notificationsRoutes);
+protectedApp.route('/search', searchRoutes);
+protectedApp.route('/analytics', analyticsRoutes);
+protectedApp.route('/sequences', sequencesRoutes);
+protectedApp.route('/organizations', organizationsRoutes);
 
 // Mount protected routes under /api
 app.route('/api', protectedApp);
+
+// ─── Twilio Inbound SMS Webhook (public — no auth) ─────────────────────────
+
+app.post('/webhooks/twilio/sms', async (c) => {
+  try {
+    const formData = await c.req.parseBody() as Record<string, string>;
+    const sms = parseInboundSms(formData);
+
+    if (!sms.from || !sms.body) {
+      return c.text('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, { 'Content-Type': 'text/xml' });
+    }
+
+    const db = c.env.DB;
+
+    // Find contact by phone number (strip formatting for matching)
+    const cleanPhone = sms.from.replace(/\D/g, '');
+    const contact = await db.prepare(
+      `SELECT c.id as contact_id, c.user_id, c.full_name
+       FROM contacts c
+       WHERE REPLACE(REPLACE(REPLACE(c.phone, '-', ''), ' ', ''), '+', '') LIKE ?
+       LIMIT 1`
+    ).bind(`%${cleanPhone.slice(-10)}`).first<{ contact_id: string; user_id: string; full_name: string }>();
+
+    if (contact) {
+      await db.prepare(
+        `INSERT INTO interactions (id, user_id, contact_id, channel, direction, body_snippet, metadata, occurred_at, created_at)
+         VALUES (?, ?, ?, 'text', 'inbound', ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), contact.user_id, contact.contact_id,
+        sms.body.substring(0, 5000),
+        JSON.stringify({ twilio_sid: sms.messageSid, from: sms.from }),
+        new Date().toISOString(), new Date().toISOString()
+      ).run();
+
+      await db.prepare('UPDATE contacts SET last_interaction_at = ? WHERE id = ?')
+        .bind(new Date().toISOString(), contact.contact_id).run();
+    }
+
+    return c.text('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, { 'Content-Type': 'text/xml' });
+  } catch (error) {
+    console.error('[twilio/webhook] Inbound SMS processing failed:', error);
+    return c.text('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, { 'Content-Type': 'text/xml' });
+  }
+});
 
 // ─── 404 Handler ────────────────────────────────────────────────────────────
 

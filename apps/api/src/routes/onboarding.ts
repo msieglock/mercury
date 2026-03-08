@@ -42,7 +42,7 @@ onboarding.post('/start', async (c) => {
     // Check for linked Google account
     const linkedAccount = await db
       .prepare(
-        'SELECT id FROM linked_accounts WHERE user_id = ? AND provider = ? AND is_active = 1'
+        'SELECT id FROM linked_accounts WHERE user_id = ? AND provider = ?'
       )
       .bind(userId, 'google')
       .first();
@@ -50,19 +50,18 @@ onboarding.post('/start', async (c) => {
     // Log onboarding start
     await db
       .prepare(
-        `INSERT INTO agent_logs (id, user_id, agent_type, action, input, tokens_used, model, cost_cents, duration_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO agent_logs (id, user_id, action, model, input_tokens, output_tokens, latency_ms, request_body, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         crypto.randomUUID(),
         userId,
-        'orchestrator',
         'onboarding_started',
-        JSON.stringify({ google_linked: !!linkedAccount }),
-        0,
         'system',
         0,
         0,
+        0,
+        JSON.stringify({ google_linked: !!linkedAccount }),
         new Date().toISOString()
       )
       .run();
@@ -104,11 +103,11 @@ onboarding.get('/status', async (c) => {
           .bind(userId)
           .first<{ count: number }>(),
         db
-          .prepare('SELECT provider, is_active FROM linked_accounts WHERE user_id = ?')
+          .prepare('SELECT provider FROM linked_accounts WHERE user_id = ?')
           .bind(userId)
           .all(),
         db
-          .prepare('SELECT style_fingerprint, onboarding_completed, mode FROM users WHERE id = ?')
+          .prepare('SELECT settings, onboarding FROM users WHERE id = ?')
           .bind(userId)
           .first(),
       ]);
@@ -118,16 +117,20 @@ onboarding.get('/status', async (c) => {
     const linkedAccounts = linkedAccountResult.results ?? [];
     const user = userResult;
 
+    const onboardingData = user?.onboarding
+      ? typeof user.onboarding === 'string' ? JSON.parse(user.onboarding as string) : user.onboarding
+      : {};
+
     const steps = {
       google_connected: linkedAccounts.some(
-        (a) => a.provider === 'google' && a.is_active
+        (a) => a.provider === 'google'
       ),
       email_synced: interactionCount > 0,
       contacts_imported: contactCount > 0,
       contacts_enriched: contactCount > 5,
-      style_analyzed: !!user?.style_fingerprint,
-      icp_set: !!user?.mode,
-      onboarding_completed: !!(user?.onboarding_completed),
+      style_analyzed: false,
+      icp_set: false,
+      onboarding_completed: !!(onboardingData?.completed),
     };
 
     const completedSteps = Object.values(steps).filter(Boolean).length;

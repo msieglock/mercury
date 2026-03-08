@@ -11,8 +11,11 @@ import {
   ArrowRight,
   Command,
   CornerDownLeft,
+  Zap,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -29,11 +32,23 @@ interface CommandItem {
   section: string;
 }
 
+interface SearchResult {
+  id: string;
+  label: string;
+  description?: string;
+  icon: React.ElementType;
+  action: () => void;
+  section: string;
+}
+
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const commands: CommandItem[] = [
     {
@@ -41,10 +56,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       label: 'Compose email',
       description: 'Draft a new message',
       icon: Mail,
-      action: () => {
-        router.push('/inbox');
-        onClose();
-      },
+      action: () => { router.push('/inbox'); onClose(); },
       shortcut: 'C',
       section: 'Quick Actions',
     },
@@ -53,10 +65,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       label: 'Find contact',
       description: 'Search your contacts',
       icon: User,
-      action: () => {
-        router.push('/people');
-        onClose();
-      },
+      action: () => { router.push('/people'); onClose(); },
       shortcut: '/P',
       section: 'Quick Actions',
     },
@@ -65,10 +74,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       label: 'View pipeline',
       description: 'Open pipeline board',
       icon: BarChart3,
-      action: () => {
-        router.push('/pipeline');
-        onClose();
-      },
+      action: () => { router.push('/pipeline'); onClose(); },
       shortcut: '/B',
       section: 'Quick Actions',
     },
@@ -77,39 +83,95 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       label: 'Settings',
       description: 'Manage your account',
       icon: Settings,
-      action: () => {
-        router.push('/settings');
-        onClose();
-      },
+      action: () => { router.push('/settings'); onClose(); },
       shortcut: ',',
       section: 'Quick Actions',
     },
   ];
 
-  const filteredCommands = commands.filter(
-    (cmd) =>
-      cmd.label.toLowerCase().includes(query.toLowerCase()) ||
-      cmd.description?.toLowerCase().includes(query.toLowerCase()),
-  );
+  // Debounced search
+  useEffect(() => {
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
 
-  const groupedCommands = filteredCommands.reduce(
-    (acc, cmd) => {
-      if (!acc[cmd.section]) acc[cmd.section] = [];
-      acc[cmd.section].push(cmd);
+    setSearching(true);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const data = await apiClient(`/api/search?q=${encodeURIComponent(query)}`);
+        const results: SearchResult[] = [];
+
+        for (const contact of (data.contacts || [])) {
+          results.push({
+            id: `contact-${contact.id}`,
+            label: contact.full_name || contact.email,
+            description: contact.company_name ? `${contact.title || ''} at ${contact.company_name}`.trim() : contact.email,
+            icon: User,
+            action: () => { router.push(`/people?contact=${contact.id}`); onClose(); },
+            section: 'Contacts',
+          });
+        }
+
+        for (const thread of (data.threads || [])) {
+          results.push({
+            id: `thread-${thread.id}`,
+            label: thread.subject || 'No subject',
+            description: thread.snippet,
+            icon: Mail,
+            action: () => { router.push(`/inbox?thread=${thread.id}`); onClose(); },
+            section: 'Threads',
+          });
+        }
+
+        for (const action of (data.actions || [])) {
+          results.push({
+            id: `action-${action.id}`,
+            label: action.title,
+            description: action.body,
+            icon: Zap,
+            action: () => { router.push('/today'); onClose(); },
+            section: 'Actions',
+          });
+        }
+
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(searchTimer.current);
+  }, [query, router, onClose]);
+
+  const filteredCommands = query.length < 2
+    ? commands.filter(
+        (cmd) =>
+          cmd.label.toLowerCase().includes(query.toLowerCase()) ||
+          cmd.description?.toLowerCase().includes(query.toLowerCase()),
+      )
+    : [];
+
+  const allItems = [...filteredCommands, ...searchResults];
+
+  const groupedItems = allItems.reduce(
+    (acc, item) => {
+      if (!acc[item.section]) acc[item.section] = [];
+      acc[item.section].push(item);
       return acc;
     },
-    {} as Record<string, CommandItem[]>,
+    {} as Record<string, (CommandItem | SearchResult)[]>,
   );
-
-  const flatList = filteredCommands;
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (open) {
-          onClose();
-        }
+        if (open) onClose();
       }
       if (!open) return;
 
@@ -119,7 +181,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex((i) => Math.min(i + 1, flatList.length - 1));
+          setSelectedIndex((i) => Math.min(i + 1, allItems.length - 1));
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -127,13 +189,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           break;
         case 'Enter':
           e.preventDefault();
-          if (flatList[selectedIndex]) {
-            flatList[selectedIndex].action();
+          if (allItems[selectedIndex]) {
+            allItems[selectedIndex].action();
           }
           break;
       }
     },
-    [open, onClose, flatList, selectedIndex],
+    [open, onClose, allItems, selectedIndex],
   );
 
   useEffect(() => {
@@ -145,6 +207,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     if (open) {
       setQuery('');
       setSelectedIndex(0);
+      setSearchResults([]);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -153,15 +216,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-onSurface/40 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
 
-      {/* Palette */}
       <div className="relative w-full max-w-lg bg-surface-containerHigh rounded-xl shadow-elevation-3 border border-outline-variant overflow-hidden animate-slide-up">
-        {/* Search Input */}
         <div className="flex items-center gap-3 px-5 border-b border-outline-variant">
           <Search className="w-5 h-5 text-onSurface-variant flex-shrink-0" />
           <input
@@ -175,20 +235,22 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             }}
             className="flex-1 py-4 text-sm bg-transparent outline-none placeholder:text-onSurface-variant text-onSurface"
           />
+          {searching && (
+            <span className="text-xs text-onSurface-variant animate-pulse">Searching...</span>
+          )}
           <kbd className="text-xs text-onSurface-variant bg-surface-container px-1.5 py-0.5 rounded-sm">
             ESC
           </kbd>
         </div>
 
-        {/* Results */}
         <div className="max-h-80 overflow-y-auto scrollbar-m3 py-2">
-          {Object.entries(groupedCommands).map(([section, items]) => (
+          {Object.entries(groupedItems).map(([section, items]) => (
             <div key={section}>
               <div className="px-5 py-2 text-xs font-medium text-onSurface-variant uppercase tracking-wider">
                 {section}
               </div>
               {items.map((item) => {
-                const globalIndex = flatList.indexOf(item);
+                const globalIndex = allItems.indexOf(item);
                 return (
                   <button
                     key={item.id}
@@ -202,21 +264,21 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     )}
                   >
                     <item.icon className="w-4 h-4 text-onSurface-variant flex-shrink-0" />
-                    <div className="flex-1 text-left">
-                      <span className="font-medium">{item.label}</span>
+                    <div className="flex-1 text-left min-w-0">
+                      <span className="font-medium truncate block">{item.label}</span>
                       {item.description && (
-                        <span className="ml-2 text-onSurface-variant">
+                        <span className="text-xs text-onSurface-variant truncate block">
                           {item.description}
                         </span>
                       )}
                     </div>
-                    {item.shortcut && (
+                    {'shortcut' in item && item.shortcut && (
                       <kbd className="text-xs text-onSurface-variant bg-surface-container px-1.5 py-0.5 rounded-sm">
                         {item.shortcut}
                       </kbd>
                     )}
                     {globalIndex === selectedIndex && (
-                      <CornerDownLeft className="w-3.5 h-3.5 text-onSurface-variant" />
+                      <CornerDownLeft className="w-3.5 h-3.5 text-onSurface-variant flex-shrink-0" />
                     )}
                   </button>
                 );
@@ -224,14 +286,19 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             </div>
           ))}
 
-          {flatList.length === 0 && (
+          {allItems.length === 0 && query.length >= 2 && !searching && (
             <div className="px-5 py-8 text-center text-sm text-onSurface-variant">
               No results found for &ldquo;{query}&rdquo;
             </div>
           )}
+
+          {allItems.length === 0 && query.length < 2 && query.length > 0 && (
+            <div className="px-5 py-8 text-center text-sm text-onSurface-variant">
+              Type at least 2 characters to search...
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-2.5 border-t border-outline-variant flex items-center gap-4 text-xs text-onSurface-variant">
           <span className="flex items-center gap-1">
             <ArrowRight className="w-3 h-3 rotate-90" /> Navigate
